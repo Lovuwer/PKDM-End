@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LogOut, LayoutDashboard, ShieldCheck, FileSpreadsheet } from 'lucide-react';
+import { LogOut, LayoutDashboard, ShieldCheck, FileSpreadsheet, BookOpen } from 'lucide-react';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -34,13 +34,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <Link
                 href="/admin/manage-faculty"
                 className={`px-3 py-2 flex items-center rounded-lg text-sm font-medium transition-all ${
-                  pathname.startsWith('/admin/manage-faculty') 
+                  pathname === '/admin/manage-faculty' 
                     ? 'bg-gray-100 text-gray-900' 
                     : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
                 }`}
               >
                 <ShieldCheck className="w-4 h-4 mr-2" />
                 Manage Faculty
+              </Link>
+              <Link
+                href="/admin/assign-subjects"
+                className={`px-3 py-2 flex items-center rounded-lg text-sm font-medium transition-all ${
+                  pathname.startsWith('/admin/assign-subjects') 
+                    ? 'bg-gray-100 text-gray-900' 
+                    : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                <BookOpen className="w-4 h-4 mr-2" />
+                Assign Subjects
               </Link>
             </nav>
           </div>

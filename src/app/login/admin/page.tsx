@@ -3,14 +3,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import gsap from 'gsap';
-import { Lock, Mail, ArrowRight } from 'lucide-react';
+import { Lock, User, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function AdminLogin() {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     gsap.fromTo(
@@ -20,9 +22,28 @@ export default function AdminLogin() {
     );
   }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    router.push('/admin/dashboard');
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await fetch('/api/auth/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+
+      if (res.ok) {
+        router.push('/admin/dashboard');
+      } else {
+        setError('Invalid username or password');
+      }
+    } catch (err) {
+      setError('An error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -39,16 +60,23 @@ export default function AdminLogin() {
 
         <form onSubmit={handleLogin} className="bg-white p-6 rounded-3xl shadow-soft border border-soft space-y-4">
           
+          {error && (
+            <div className="bg-red-50 text-red-600 text-sm px-4 py-3 rounded-xl flex items-center border border-red-100">
+              <AlertCircle className="w-4 h-4 mr-2" />
+              {error}
+            </div>
+          )}
+
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider ml-1">Email</label>
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider ml-1">Username</label>
             <div className="flex items-center px-4 py-3 bg-gray-50 rounded-xl border border-transparent focus-within:border-gray-200 focus-within:bg-white transition-all">
-              <Mail className="w-5 h-5 text-gray-400 mr-3" />
+              <User className="w-5 h-5 text-gray-400 mr-3" />
               <input
-                type="email"
+                type="text"
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@pallikoodam.edu"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Administrator"
                 className="w-full bg-transparent border-none outline-none text-gray-900 placeholder-gray-400 text-sm"
               />
             </div>
@@ -71,10 +99,17 @@ export default function AdminLogin() {
 
           <button
             type="submit"
-            className="w-full mt-4 bg-gray-900 hover:bg-gray-800 text-white font-medium py-3.5 rounded-xl transition-colors flex items-center justify-center group"
+            disabled={loading}
+            className="w-full mt-4 bg-gray-900 hover:bg-gray-800 text-white font-medium py-3.5 rounded-xl transition-colors flex items-center justify-center group disabled:opacity-70"
           >
-            Sign In
-            <ArrowRight className="w-4 h-4 ml-2 opacity-70 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+            {loading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <>
+                Sign In
+                <ArrowRight className="w-4 h-4 ml-2 opacity-70 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+              </>
+            )}
           </button>
           
         </form>

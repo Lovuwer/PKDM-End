@@ -1,13 +1,20 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import gsap from 'gsap';
-import { Save, CheckCircle2, ChevronDown, Calendar, FileText } from 'lucide-react';
+import { Save, CheckCircle2, ChevronDown, Calendar, FileText, AlertTriangle, Sparkles } from 'lucide-react';
 
 export default function WeeklyPlan() {
   const [selectedSubject, setSelectedSubject] = useState('');
+  const [startDate, setStartDate] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('saved');
+  const [holidayWarning, setHolidayWarning] = useState('');
+  const [suggestedTopic, setSuggestedTopic] = useState('');
+  const [learningObjective, setLearningObjective] = useState('');
+  
   const saveBannerRef = useRef<HTMLDivElement>(null);
+  const suggestionRef = useRef<HTMLDivElement>(null);
+  const holidayRef = useRef<HTMLDivElement>(null);
   
   const triggerAutoSave = () => {
     setSaveStatus('saving');
@@ -15,6 +22,48 @@ export default function WeeklyPlan() {
       setSaveStatus('saved');
       gsap.fromTo(saveBannerRef.current, { scale: 0.95 }, { scale: 1, duration: 0.3, ease: 'back.out' });
     }, 1500);
+  };
+
+  useEffect(() => {
+    if (!startDate) {
+      setHolidayWarning('');
+      setSuggestedTopic('');
+      return;
+    }
+
+    const date = new Date(startDate);
+    const month = date.getMonth(); // 0 = Jan, 9 = Oct, 10 = Nov
+    
+    // 1. Smart Holiday/Event detection warnings
+    if (month === 11 && date.getDate() > 20) {
+      setHolidayWarning('⚠️ Notice: Approaching Winter Break. Consider lighter review assignments.');
+    } else if (month === 9 && date.getDate() > 28) {
+      setHolidayWarning('⚠️ Notice: Diwali holidays occur during this week. Less instruction time available.');
+    } else if (month === 8 && date.getDate() < 10) {
+      setHolidayWarning('⚠️ Notice: Onam week detected. Check school calendar for days off.');
+    } else {
+      setHolidayWarning('');
+    }
+
+    // Animate holiday warning if present
+    if (holidayWarning && holidayRef.current) {
+      gsap.fromTo(holidayRef.current, { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.4 });
+    }
+
+    // 2. Auto-link Weekly Plan to read from Yearly Plan topics
+    // In a real app, this would be an API call `fetch('/api/yearly-plan/topic?date=...')`
+    if (selectedSubject === 'eco-11a') {
+      setSuggestedTopic('Introduction to Macroeconomics (From Yearly Plan: Month 1, Week 1)');
+      if (suggestionRef.current) {
+        gsap.fromTo(suggestionRef.current, { opacity: 0, scale: 0.95 }, { opacity: 1, scale: 1, duration: 0.5, ease: 'power2.out' });
+      }
+    }
+
+  }, [startDate, selectedSubject, holidayWarning]);
+
+  const acceptSuggestion = () => {
+    setLearningObjective('Understand the fundamental differences between micro and macro economics. Key metrics: GDP, Inflation.');
+    triggerAutoSave();
   };
 
   return (
@@ -68,7 +117,8 @@ export default function WeeklyPlan() {
           </label>
           <input 
             type="date"
-            onChange={triggerAutoSave}
+            value={startDate}
+            onChange={(e) => { setStartDate(e.target.value); triggerAutoSave(); }}
             className="w-full bg-gray-50 border border-gray-200 text-gray-900 py-3 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900"
           />
         </div>
@@ -93,11 +143,34 @@ export default function WeeklyPlan() {
           <h2 className="text-xl font-medium text-gray-900">Lesson Details</h2>
         </div>
 
+        {holidayWarning && (
+          <div ref={holidayRef} className="bg-amber-50 text-amber-800 p-4 rounded-xl border border-amber-200 flex items-start text-sm mb-4">
+            <AlertTriangle className="w-5 h-5 mr-3 flex-shrink-0 mt-0.5" />
+            <p className="leading-relaxed">{holidayWarning}</p>
+          </div>
+        )}
+
+        {suggestedTopic && (
+          <div ref={suggestionRef} className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6 shadow-sm">
+            <h3 className="text-sm font-semibold text-blue-900 flex items-center mb-1.5">
+              <Sparkles className="w-4 h-4 mr-1.5 text-blue-600" /> Smart Suggestion
+            </h3>
+            <p className="text-sm text-blue-800 mb-3">{suggestedTopic}</p>
+            <button 
+              onClick={acceptSuggestion}
+              className="bg-white text-blue-700 border border-blue-200 px-4 py-2 rounded-lg text-xs font-medium hover:bg-blue-50 transition-colors"
+            >
+              Auto-fill Lesson Data
+            </button>
+          </div>
+        )}
+
         <div className="space-y-5">
           <div>
             <label className="text-sm font-semibold text-gray-700 mb-1.5 block">Learning Objective</label>
             <textarea 
-              onChange={triggerAutoSave}
+              value={learningObjective}
+              onChange={(e) => { setLearningObjective(e.target.value); triggerAutoSave(); }}
               placeholder="What should the students understand by the end?"
               className="w-full bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 bg-white transition-all min-h-[100px] resize-none"
             ></textarea>

@@ -3,10 +3,66 @@
 import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import gsap from 'gsap';
-import { FilePlus2, CalendarDays, TrendingUp, Building2, ChevronRight } from 'lucide-react';
+import { FilePlus2, CalendarDays, TrendingUp, Building2, ChevronRight, Download } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import ExcelJS from 'exceljs';
 
 export default function TeacherDashboard() {
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleExport = async (subjectName: string, format: 'pdf' | 'excel') => {
+    // Generate mock lesson plan data
+    const mockData = [
+      ['Date/Month', 'Learning Objective', 'Methodology', 'Status'],
+      ['June 2025', 'Introduction to Macroeconomics', 'Lecture & Discussion', 'Completed'],
+      ['July 2025', 'National Income Accounting', 'Problem Solving', 'Pending'],
+    ];
+
+    if (format === 'pdf') {
+      const doc = new jsPDF();
+      doc.setFontSize(18);
+      doc.text(`Lesson Plan: ${subjectName}`, 14, 22);
+      
+      autoTable(doc, {
+        startY: 30,
+        head: [mockData[0]],
+        body: mockData.slice(1),
+        theme: 'grid',
+        styles: { fontSize: 10, cellPadding: 5 },
+        headStyles: { fillColor: [17, 24, 39], textColor: [255, 255, 255] },
+      });
+      
+      doc.save(`Lesson_Plan_${subjectName.replace(/\s+/g, '_')}.pdf`);
+    } else {
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('Lesson Plan');
+      
+      sheet.columns = [
+        { header: 'Month / Date', key: 'date', width: 20 },
+        { header: 'Learning Objective', key: 'objective', width: 40 },
+        { header: 'Methodology', key: 'method', width: 30 },
+        { header: 'Status', key: 'status', width: 15 },
+      ];
+      
+      mockData.slice(1).forEach(row => {
+        sheet.addRow({
+          date: row[0], objective: row[1], method: row[2], status: row[3]
+        });
+      });
+      
+      sheet.getRow(1).font = { bold: true };
+      
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Lesson_Plan_${subjectName.replace(/\s+/g, '_')}.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    }
+  };
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -82,8 +138,20 @@ export default function TeacherDashboard() {
               <h3 className="font-medium text-gray-900">Economics · 11th Standard</h3>
               <p className="text-xs text-gray-500">Batch A</p>
             </div>
-            <div className="text-right">
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">
+            <div className="text-right flex items-center justify-end space-x-2">
+              <button 
+                onClick={() => handleExport('Economics - 11th Standard', 'excel')}
+                className="inline-flex items-center px-2 py-1 bg-white border border-gray-200 text-gray-600 rounded-lg text-xs hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5 mr-1" /> Excel
+              </button>
+              <button 
+                onClick={() => handleExport('Economics - 11th Standard', 'pdf')}
+                className="inline-flex items-center px-2 py-1 bg-white border border-gray-200 text-gray-600 rounded-lg text-xs hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5 mr-1" /> PDF
+              </button>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200 ml-2">
                 Yearly Plan Submitted
               </span>
             </div>
@@ -97,8 +165,20 @@ export default function TeacherDashboard() {
               <h3 className="font-medium text-gray-900">Commerce · 11th Standard</h3>
               <p className="text-xs text-gray-500">Batch B</p>
             </div>
-            <div className="text-right">
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+            <div className="text-right flex items-center justify-end space-x-2">
+              <button 
+                onClick={() => handleExport('Commerce - 11th Standard', 'excel')}
+                className="inline-flex items-center px-2 py-1 bg-white border border-gray-200 text-gray-600 rounded-lg text-xs hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5 mr-1" /> Excel
+              </button>
+              <button 
+                onClick={() => handleExport('Commerce - 11th Standard', 'pdf')}
+                className="inline-flex items-center px-2 py-1 bg-white border border-gray-200 text-gray-600 rounded-lg text-xs hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5 mr-1" /> PDF
+              </button>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 ml-2">
                 Yearly Plan Draft
               </span>
             </div>
