@@ -1,0 +1,78 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String   // Hashed
+  role      Role     // TEACHER | ADMIN
+  
+  // Relations
+  assignments Assignment[]
+  yearlyPlans YearlyPlan[]
+  weeklyPlans WeeklyPlan[]
+}
+
+// Maps a specific subject/class to a Teacher
+model Assignment {
+  id        String @id @default(cuid())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id])
+  class     String // e.g., "11th Standard"
+  batch     String // e.g., "Batch A"
+  subject   String // e.g., "Economics"
+}
+
+model YearlyPlan {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  class          String
+  subject        String
+  academicYear   String   // e.g., "2024-2025"
+  
+  // JSON field handles fluid drafts without failing strict DB constraints
+  draftData      Json?    
+  
+  status         PlanStatus  // DRAFT | SUBMITTED
+  submittedAt    DateTime?
+  updatedAt      DateTime @updatedAt
+}
+
+model WeeklyPlan {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  class             String
+  subject           String
+  
+  startDate         DateTime
+  endDate           DateTime
+  
+  learningObjective String?
+  teachingMethod    String?
+  field1            String?
+  field2            String?
+  field3            String?
+  field4            String?
+  
+  status            PlanStatus // DRAFT | SUBMITTED
+  submittedAt       DateTime?
+  updatedAt         DateTime @updatedAt
+}
+
+enum Role {
+  TEACHER
+  ADMIN
+}
+
+enum PlanStatus {
+  DRAFT
+  SUBMITTED
+}
