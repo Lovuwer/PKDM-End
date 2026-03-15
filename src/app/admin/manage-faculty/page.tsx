@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
-import { UserPlus, Mail, Lock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { UserPlus, Mail, Lock, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function ManageFaculty() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -10,7 +10,8 @@ export default function ManageFaculty() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [status, setStatus] = useState<'idle' | 'creating' | 'success'>('idle');
+  const [status, setStatus] = useState<'idle' | 'creating' | 'success' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -23,20 +24,36 @@ export default function ManageFaculty() {
     return () => ctx.revert();
   }, []);
 
-  const handleCreateFaculty = (e: React.FormEvent) => {
+  const handleCreateFaculty = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatus('creating');
+    setErrorMsg('');
     
-    // Simulate API call
-    setTimeout(() => {
-      setStatus('success');
-      setName('');
-      setEmail('');
-      setPassword('');
-      
-      // Reset back to idle after a few seconds
+    try {
+      const res = await fetch('/api/teachers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password })
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setStatus('success');
+        setName('');
+        setEmail('');
+        setPassword('');
+        setTimeout(() => setStatus('idle'), 3000);
+      } else {
+        setErrorMsg(data.error || 'Failed to create teacher');
+        setStatus('error');
+        setTimeout(() => setStatus('idle'), 3000);
+      }
+    } catch {
+      setErrorMsg('Network error. Please try again.');
+      setStatus('error');
       setTimeout(() => setStatus('idle'), 3000);
-    }, 1500);
+    }
   };
 
   return (
@@ -109,6 +126,12 @@ export default function ManageFaculty() {
                     Teacher account created successfully.
                   </div>
                 )}
+                {status === 'error' && (
+                  <div className="flex items-center text-sm font-medium text-red-600">
+                    <AlertCircle className="w-5 h-5 mr-2" />
+                    {errorMsg}
+                  </div>
+                )}
               </div>
 
               <button 
@@ -116,7 +139,11 @@ export default function ManageFaculty() {
                 disabled={status === 'creating'}
                 className="bg-gray-900 hover:bg-gray-800 text-white px-8 py-3 rounded-xl font-medium transition-all active:scale-95 disabled:opacity-70 flex items-center w-full sm:w-auto justify-center"
               >
-                {status === 'creating' ? 'Registering...' : 'Create Account'}
+                {status === 'creating' ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Registering...</>
+                ) : (
+                  'Create Account'
+                )}
               </button>
             </div>
           </form>
@@ -133,7 +160,7 @@ export default function ManageFaculty() {
               When you create a teacher account, they can immediately log in through the Faculty Portal using the email and password you assign them.
             </p>
             <p className="text-sm text-gray-500 leading-relaxed">
-              You will need to manually assign them subjects on the backend after their account is generated.
+              After creating the account, head to <strong>Assign Subjects</strong> to bind classes and subjects to them.
             </p>
           </div>
         </div>

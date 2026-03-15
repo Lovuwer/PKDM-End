@@ -3,24 +3,27 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import gsap from 'gsap';
-import { Search, Building2, TrendingUp, CheckCircle2, Clock, XCircle, FileDown } from 'lucide-react';
+import { Search, CheckCircle2, Clock, ChevronRight } from 'lucide-react';
 
-const mockTeachers = [
-  { id: '1', name: 'Febin Thomas', initials: 'FT', totalClasses: 2, completed: 1, pending: 1 },
-  { id: '2', name: 'Sarah Joseph', initials: 'SJ', totalClasses: 3, completed: 3, pending: 0 },
-  { id: '3', name: 'Ajay K', initials: 'AK', totalClasses: 1, completed: 0, pending: 1 },
-];
+interface Teacher {
+  id: string;
+  name: string;
+  assignments: { id: string; class: string; subject: string }[];
+  yearlyPlans: { id: string; status: string }[];
+  weeklyPlans: { id: string; status: string }[];
+}
 
 export default function AdminDashboard() {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [loading, setLoading] = useState(true);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Initial page load animation
     const ctx = gsap.context(() => {
       gsap.fromTo(
         '.dash-animate',
@@ -28,10 +31,19 @@ export default function AdminDashboard() {
         { opacity: 1, y: 0, duration: 0.6, stagger: 0.1, ease: 'power2.out' }
       );
     }, containerRef);
+
+    // Fetch teachers from API
+    fetch('/api/teachers')
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) setTeachers(data);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+
     return () => ctx.revert();
   }, []);
 
-  // Live search GSAP dropdown
   useEffect(() => {
     if (searchTerm.length > 0) {
       setShowDropdown(true);
@@ -45,7 +57,17 @@ export default function AdminDashboard() {
     }
   }, [searchTerm]);
 
-  const filteredTeachers = mockTeachers.filter(t => t.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredTeachers = teachers.filter(t => t.name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  const getTeacherStats = (teacher: Teacher) => {
+    const totalAssignments = teacher.assignments.length;
+    const completedYearly = teacher.yearlyPlans.filter(p => p.status === 'SUBMITTED').length;
+    const completedWeekly = teacher.weeklyPlans.filter(p => p.status === 'SUBMITTED').length;
+    const totalCompleted = completedYearly + completedWeekly;
+    const totalPlans = totalAssignments * 2; // yearly + weekly per assignment
+    const pending = totalPlans - totalCompleted;
+    return { totalAssignments, totalCompleted, pending: Math.max(0, pending) };
+  };
 
   const handleSelectTeacher = (id: string) => {
     router.push(`/admin/teacher/${id}`);
@@ -88,9 +110,12 @@ export default function AdminDashboard() {
                 >
                   <div className="flex items-center">
                     <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center mr-3 font-medium text-gray-600 text-xs">
-                      {teacher.initials}
+                      {teacher.name.split(' ').map(n => n[0]).join('')}
                     </div>
-                    <span className="font-medium text-gray-900">{teacher.name}</span>
+                    <div>
+                      <span className="font-medium text-gray-900">{teacher.name}</span>
+                      <p className="text-xs text-gray-500">{teacher.assignments.length} subject(s)</p>
+                    </div>
                   </div>
                   <ChevronRight className="w-4 h-4 text-gray-300" />
                 </button>
@@ -118,49 +143,58 @@ export default function AdminDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {mockTeachers.map((teacher) => (
-                <tr key={teacher.id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-6 py-5">
-                    <div className="flex items-center">
-                      <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mr-4 font-medium text-gray-600">
-                        {teacher.initials}
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{teacher.name}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-5">
-                    <span className="text-gray-600 font-medium">{teacher.totalClasses}</span>
-                  </td>
-                  <td className="px-6 py-5">
-                    <div className="flex items-center text-green-700">
-                      <CheckCircle2 className="w-4 h-4 mr-2" />
-                      <span className="font-medium">{teacher.completed}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-5">
-                    {teacher.pending > 0 ? (
-                      <div className="flex items-center text-amber-700">
-                        <Clock className="w-4 h-4 mr-2" />
-                        <span className="font-medium">{teacher.pending}</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center text-gray-400">
-                        <span className="font-medium">0</span>
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-5 text-right">
-                    <button 
-                      onClick={() => handleSelectTeacher(teacher.id)}
-                      className="inline-flex items-center px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-xl transition-colors shadow-sm"
-                    >
-                      View Profile
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {loading ? (
+                <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-400">Loading teachers...</td></tr>
+              ) : teachers.length === 0 ? (
+                <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-400">No teachers found. Create one in Manage Faculty.</td></tr>
+              ) : (
+                teachers.map((teacher) => {
+                  const stats = getTeacherStats(teacher);
+                  return (
+                    <tr key={teacher.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="px-6 py-5">
+                        <div className="flex items-center">
+                          <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mr-4 font-medium text-gray-600">
+                            {teacher.name.split(' ').map(n => n[0]).join('')}
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">{teacher.name}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-5">
+                        <span className="text-gray-600 font-medium">{stats.totalAssignments}</span>
+                      </td>
+                      <td className="px-6 py-5">
+                        <div className="flex items-center text-green-700">
+                          <CheckCircle2 className="w-4 h-4 mr-2" />
+                          <span className="font-medium">{stats.totalCompleted}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-5">
+                        {stats.pending > 0 ? (
+                          <div className="flex items-center text-amber-700">
+                            <Clock className="w-4 h-4 mr-2" />
+                            <span className="font-medium">{stats.pending}</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center text-gray-400">
+                            <span className="font-medium">0</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-5 text-right">
+                        <button 
+                          onClick={() => handleSelectTeacher(teacher.id)}
+                          className="inline-flex items-center px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-xl transition-colors shadow-sm"
+                        >
+                          View Profile
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -168,9 +202,4 @@ export default function AdminDashboard() {
 
     </div>
   );
-}
-
-// Ensure lucide icon renders cleanly
-function ChevronRight(props: any) {
-  return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="m9 18 6-6-6-6"/></svg>
 }

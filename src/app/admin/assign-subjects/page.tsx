@@ -2,25 +2,26 @@
 
 import { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
-import { BookOpen, UserCheck, Layers, Users, CheckCircle2, ChevronDown } from 'lucide-react';
+import { BookOpen, UserCheck, Layers, Users, CheckCircle2, ChevronDown, AlertCircle, Loader2 } from 'lucide-react';
 
-const mockTeachers = [
-  { id: '1', name: 'Febin Thomas' },
-  { id: '2', name: 'Sarah Joseph' },
-  { id: '3', name: 'Ajay K' },
-];
+interface Teacher {
+  id: string;
+  name: string;
+}
 
-const mockClasses = ['10th Standard', '11th Standard', '12th Standard'];
-const mockBatches = ['Batch A', 'Batch B', 'Batch C'];
+const CLASS_OPTIONS = ['10th Standard', '11th Standard', '12th Standard'];
+const BATCH_OPTIONS = ['Batch A', 'Batch B', 'Batch C'];
 
 export default function AssignSubjects() {
   const containerRef = useRef<HTMLDivElement>(null);
   
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedBatch, setSelectedBatch] = useState('');
   const [subjectName, setSubjectName] = useState('');
-  const [status, setStatus] = useState<'idle' | 'assigning' | 'success'>('idle');
+  const [status, setStatus] = useState<'idle' | 'assigning' | 'success' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -30,23 +31,53 @@ export default function AssignSubjects() {
         { opacity: 1, y: 0, duration: 0.6, stagger: 0.1, ease: 'power2.out' }
       );
     }, containerRef);
+
+    // Fetch teachers from API
+    fetch('/api/teachers')
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) setTeachers(data);
+      })
+      .catch(() => {});
+
     return () => ctx.revert();
   }, []);
 
-  const handleAssignSubmit = (e: React.FormEvent) => {
+  const handleAssignSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatus('assigning');
-    
-    // Simulate API call
-    setTimeout(() => {
-      setStatus('success');
-      setSelectedClass('');
-      setSelectedBatch('');
-      setSubjectName('');
-      
-      // Reset back to idle after a few seconds
+    setErrorMsg('');
+
+    try {
+      const res = await fetch('/api/assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: selectedTeacher,
+          className: selectedClass,
+          batch: selectedBatch,
+          subject: subjectName
+        })
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setStatus('success');
+        setSelectedClass('');
+        setSelectedBatch('');
+        setSubjectName('');
+        setTimeout(() => setStatus('idle'), 3000);
+      } else {
+        setErrorMsg(data.error || 'Failed to assign subject');
+        setStatus('error');
+        setTimeout(() => setStatus('idle'), 3000);
+      }
+    } catch {
+      setErrorMsg('Network error. Please try again.');
+      setStatus('error');
       setTimeout(() => setStatus('idle'), 3000);
-    }, 1200);
+    }
   };
 
   return (
@@ -64,7 +95,7 @@ export default function AssignSubjects() {
           </div>
           <div>
             <h2 className="text-xl font-medium text-gray-900">New Assignment</h2>
-            <p className="text-sm text-gray-500">This assignment will appear instantly on the selected teacher's portal.</p>
+            <p className="text-sm text-gray-500">This assignment will appear instantly on the selected teacher&apos;s portal.</p>
           </div>
         </div>
 
@@ -83,7 +114,7 @@ export default function AssignSubjects() {
                 onChange={(e) => setSelectedTeacher(e.target.value)}
               >
                 <option value="" disabled>Choose a teacher...</option>
-                {mockTeachers.map(t => (
+                {teachers.map(t => (
                   <option key={t.id} value={t.id}>{t.name}</option>
                 ))}
               </select>
@@ -105,7 +136,7 @@ export default function AssignSubjects() {
                   onChange={(e) => setSelectedClass(e.target.value)}
                 >
                   <option value="" disabled>Choose a class...</option>
-                  {mockClasses.map(c => (
+                  {CLASS_OPTIONS.map(c => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
@@ -126,7 +157,7 @@ export default function AssignSubjects() {
                   onChange={(e) => setSelectedBatch(e.target.value)}
                 >
                   <option value="" disabled>Choose a batch...</option>
-                  {mockBatches.map(b => (
+                  {BATCH_OPTIONS.map(b => (
                     <option key={b} value={b}>{b}</option>
                   ))}
                 </select>
@@ -145,7 +176,7 @@ export default function AssignSubjects() {
               required
               value={subjectName}
               onChange={(e) => setSubjectName(e.target.value)}
-              placeholder="e.g., Economics, Advanced Mathematics"
+              placeholder="e.g., Economics, Mathematics, Physics"
               className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 transition-all"
             />
           </div>
@@ -158,6 +189,12 @@ export default function AssignSubjects() {
                   Subject successfully assigned to Teacher.
                 </div>
               )}
+              {status === 'error' && (
+                <div className="flex items-center text-sm font-medium text-red-600">
+                  <AlertCircle className="w-5 h-5 mr-2" />
+                  {errorMsg}
+                </div>
+              )}
             </div>
 
             <button 
@@ -165,7 +202,11 @@ export default function AssignSubjects() {
               disabled={status === 'assigning'}
               className="bg-gray-900 hover:bg-gray-800 text-white px-8 py-3.5 rounded-xl font-medium transition-all active:scale-95 disabled:opacity-70 flex items-center w-full sm:w-auto justify-center"
             >
-              {status === 'assigning' ? 'Publishing Assignment...' : 'Assign to Faculty'}
+              {status === 'assigning' ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Publishing...</>
+              ) : (
+                'Assign to Faculty'
+              )}
             </button>
           </div>
           
