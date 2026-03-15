@@ -10,7 +10,7 @@ model User {
   id        String   @id @default(cuid())
   name      String
   email     String   @unique
-  password  String   // Hashed
+  password  String   // Hashed or placeholder "__UNREGISTERED__" for bulk-imported teachers
   role      Role     // TEACHER | ADMIN
   
   // Relations
@@ -21,12 +21,15 @@ model User {
 
 // Maps a specific subject/class to a Teacher
 model Assignment {
-  id        String @id @default(cuid())
-  userId    String
-  user      User   @relation(fields: [userId], references: [id])
-  class     String // e.g., "11th Standard"
-  batch     String // e.g., "Batch A"
-  subject   String // e.g., "Economics"
+  id         String @id @default(cuid())
+  userId     String
+  user       User   @relation(fields: [userId], references: [id])
+  class      String // e.g., "Class 11"
+  batch      String // e.g., "Batch A"
+  subject    String // e.g., "Economics"
+  subSubject String? // e.g., "Reading", "Free Writing" — may be empty for higher classes
+
+  @@unique([userId, class, subject])
 }
 
 model YearlyPlan {
@@ -35,7 +38,7 @@ model YearlyPlan {
   user           User     @relation(fields: [userId], references: [id])
   class          String
   subject        String
-  academicYear   String   // e.g., "2024-2025"
+  academicYear   String   // e.g., "2025-2026"
   
   // JSON field handles fluid drafts without failing strict DB constraints
   draftData      Json?    
@@ -43,6 +46,8 @@ model YearlyPlan {
   status         PlanStatus  // DRAFT | SUBMITTED
   submittedAt    DateTime?
   updatedAt      DateTime @updatedAt
+
+  @@unique([userId, class, subject, academicYear])
 }
 
 model WeeklyPlan {

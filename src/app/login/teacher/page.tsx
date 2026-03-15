@@ -115,6 +115,11 @@ export default function TeacherLogin() {
               </>
             )}
           </button>
+
+          <p className="text-center text-sm text-gray-500 mt-4">
+            Don&apos;t have an account?{' '}
+            <a href="/register/teacher" className="text-gray-900 font-medium hover:underline">Register</a>
+          </p>
           
         </form>
 

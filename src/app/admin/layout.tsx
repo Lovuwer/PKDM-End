@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { LogOut, LayoutDashboard, ShieldCheck, BookOpen, Menu, X } from 'lucide-react';
+import { LogOut, LayoutDashboard, ShieldCheck, BookOpen, Menu, X, Upload } from 'lucide-react';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -16,6 +16,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
     { name: 'Manage Faculty', href: '/admin/manage-faculty', icon: ShieldCheck },
     { name: 'Assign Subjects', href: '/admin/assign-subjects', icon: BookOpen },
+    { name: 'Import Data', href: '/admin/import', icon: Upload },
   ];
 
   const handleSignOut = () => {

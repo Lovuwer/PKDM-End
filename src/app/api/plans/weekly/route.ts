@@ -13,35 +13,43 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json(plans);
-  } catch {
+  } catch (error) {
+    console.error('[API /api/plans/weekly GET]', error);
     return NextResponse.json({ error: 'Failed to fetch weekly plans' }, { status: 500 });
   }
 }
 
-// POST: Create a new weekly plan
+// POST: Create or submit a weekly plan
 export async function POST(request: Request) {
   try {
-    const { userId, className, subject, startDate, endDate, learningObjective, teachingMethod, field1, field2, field3, field4 } = await request.json();
+    const body = await request.json();
+    const { userId, className, subject, startDate, endDate, learningObjective, teachingMethod, field1, field2, field3, field4, status } = body;
+
+    if (!userId || !className || !subject) {
+      return NextResponse.json({ error: 'userId, className, and subject are required' }, { status: 400 });
+    }
 
     const plan = await prisma.weeklyPlan.create({
       data: {
         userId,
         class: className,
         subject,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-        learningObjective,
-        teachingMethod,
-        field1,
-        field2,
-        field3,
-        field4,
-        status: 'DRAFT'
+        startDate: startDate ? new Date(startDate) : new Date(),
+        endDate: endDate ? new Date(endDate) : new Date(),
+        learningObjective: learningObjective || field1 || null,
+        teachingMethod: teachingMethod || field2 || null,
+        field1: field1 || null,
+        field2: field2 || null,
+        field3: field3 || null,
+        field4: field4 || null,
+        status: status || 'DRAFT',
+        submittedAt: status === 'SUBMITTED' ? new Date() : null,
       }
     });
 
     return NextResponse.json({ success: true, plan });
-  } catch {
+  } catch (error) {
+    console.error('[API /api/plans/weekly POST]', error);
     return NextResponse.json({ error: 'Failed to create weekly plan' }, { status: 500 });
   }
 }
@@ -50,6 +58,10 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const { id, learningObjective, teachingMethod, field1, field2, field3, field4, status } = await request.json();
+
+    if (!id) {
+      return NextResponse.json({ error: 'Plan id is required' }, { status: 400 });
+    }
 
     const plan = await prisma.weeklyPlan.update({
       where: { id },
@@ -66,7 +78,8 @@ export async function PUT(request: Request) {
     });
 
     return NextResponse.json({ success: true, plan });
-  } catch {
+  } catch (error) {
+    console.error('[API /api/plans/weekly PUT]', error);
     return NextResponse.json({ error: 'Failed to update weekly plan' }, { status: 500 });
   }
 }
