@@ -8,14 +8,15 @@ export async function GET() {
       where: { role: 'TEACHER' },
       include: {
         assignments: true,
-        yearlyPlans: { select: { id: true, class: true, subject: true, status: true } },
+        yearlyPlans: { select: { id: true, class: true, subject: true, status: true, draftData: true } },
         weeklyPlans: { select: { id: true, class: true, subject: true, status: true } },
       },
       orderBy: { name: 'asc' }
     });
 
     return NextResponse.json(teachers);
-  } catch {
+  } catch (error) {
+    console.error('[API /api/teachers GET]', error);
     return NextResponse.json({ error: 'Failed to fetch teachers' }, { status: 500 });
   }
 }
@@ -39,7 +40,8 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ success: true, user: { id: user.id, name: user.name, email: user.email } });
-  } catch {
-    return NextResponse.json({ error: 'Failed to create teacher' }, { status: 500 });
+  } catch (error) {
+    console.error('[API /api/teachers POST]', error);
+    return NextResponse.json({ error: 'Failed to create teacher. Database may not be initialized — try hitting /api/seed first.' }, { status: 500 });
   }
 }

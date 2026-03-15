@@ -33,7 +33,7 @@ export default function Home() {
     <div ref={containerRef} className="min-h-[85vh] flex flex-col items-center justify-center p-6">
       
       <div className="text-center mb-12 stagger-fade">
-        <h1 className="text-4xl font-semibold tracking-tight text-gray-900 mb-3">Pallikoodam</h1>
+        <img src="/pallikoodam-logo.png" alt="Pallikoodam" className="h-20 mx-auto mb-4 object-contain" />
         <p className="text-gray-500 text-sm max-w-md mx-auto">
           Welcome to the academic planning platform. Please select your portal to continue.
         </p>

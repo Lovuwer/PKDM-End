@@ -2,21 +2,145 @@
 
 import { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
-import { BookOpen, UserCheck, Layers, Users, CheckCircle2, ChevronDown, AlertCircle, Loader2 } from 'lucide-react';
+import { BookOpen, UserCheck, Layers, Users, CheckCircle2, ChevronDown, ChevronUp, AlertCircle, Loader2 } from 'lucide-react';
 
 interface Teacher {
   id: string;
   name: string;
 }
 
-const CLASS_OPTIONS = ['10th Standard', '11th Standard', '12th Standard'];
+// Full Pallikoodam school structure from pallikoodam.org
+const CLASS_GROUPS = [
+  { label: 'Play School (Kalari)', options: ['Nursery', 'LKG', 'UKG'] },
+  { label: 'Junior School', options: ['Class 1', 'Class 2', 'Class 3', 'Class 4'] },
+  { label: 'Middle School', options: ['Class 5', 'Class 6', 'Class 7', 'Class 8'] },
+  { label: 'High School (ICSE)', options: ['Class 9', 'Class 10'] },
+  { label: 'ISC', options: ['Class 11', 'Class 12'] },
+];
+
 const BATCH_OPTIONS = ['Batch A', 'Batch B', 'Batch C'];
+
+// Custom dropdown component matching the design reference
+function CustomDropdown({ 
+  label, 
+  icon: Icon, 
+  step, 
+  value, 
+  onChange, 
+  placeholder, 
+  options,
+  grouped 
+}: {
+  label: string;
+  icon: React.ComponentType<any>;
+  step: string;
+  value: string;
+  onChange: (val: string) => void;
+  placeholder: string;
+  options?: string[];
+  grouped?: { label: string; options: string[] }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  useEffect(() => {
+    if (open && listRef.current) {
+      gsap.fromTo(listRef.current, { opacity: 0, y: -8 }, { opacity: 1, y: 0, duration: 0.25, ease: 'power2.out' });
+    }
+  }, [open]);
+
+  return (
+    <div>
+      <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
+        <Icon className="w-4 h-4 mr-1.5 text-gray-400" /> {step}. {label}
+      </label>
+      <div ref={ref} className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className={`w-full text-left flex items-center justify-between py-3.5 px-4 rounded-xl border-2 transition-all duration-200 ${
+            open
+              ? 'border-blue-500 bg-white shadow-[0_0_0_3px_rgba(59,130,246,0.15)]'
+              : value
+                ? 'border-gray-200 bg-white'
+                : 'border-gray-200 bg-gray-50'
+          }`}
+        >
+          <span className={`text-sm ${value ? 'text-gray-900 font-medium' : 'text-gray-400'}`}>
+            {value || placeholder}
+          </span>
+          {open ? (
+            <ChevronUp className="w-5 h-5 text-blue-500" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-gray-400" />
+          )}
+        </button>
+
+        {open && (
+          <div 
+            ref={listRef}
+            className="absolute z-50 top-full left-0 w-full mt-2 bg-white rounded-xl border-2 border-blue-500 shadow-xl overflow-hidden max-h-64 overflow-y-auto"
+          >
+            {grouped ? (
+              grouped.map((group) => (
+                <div key={group.label}>
+                  <div className="px-4 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-wider bg-gray-50 border-b border-gray-100 sticky top-0">
+                    {group.label}
+                  </div>
+                  {group.options.map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => { onChange(opt); setOpen(false); }}
+                      className={`w-full text-left px-4 py-3 text-sm transition-colors border-b border-gray-50 last:border-0 ${
+                        opt === value
+                          ? 'text-blue-600 font-semibold bg-blue-50/60'
+                          : 'text-gray-800 hover:bg-gray-50'
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              ))
+            ) : (
+              options?.map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => { onChange(opt); setOpen(false); }}
+                  className={`w-full text-left px-4 py-3 text-sm transition-colors border-b border-gray-50 last:border-0 ${
+                    opt === value
+                      ? 'text-blue-600 font-semibold bg-blue-50/60'
+                      : 'text-gray-800 hover:bg-gray-50'
+                  }`}
+                >
+                  {opt}
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function AssignSubjects() {
   const containerRef = useRef<HTMLDivElement>(null);
   
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [selectedTeacher, setSelectedTeacher] = useState('');
+  const [selectedTeacherName, setSelectedTeacherName] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedBatch, setSelectedBatch] = useState('');
   const [subjectName, setSubjectName] = useState('');
@@ -32,7 +156,6 @@ export default function AssignSubjects() {
       );
     }, containerRef);
 
-    // Fetch teachers from API
     fetch('/api/teachers')
       .then(r => r.json())
       .then(data => {
@@ -45,6 +168,13 @@ export default function AssignSubjects() {
 
   const handleAssignSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedTeacher || !selectedClass || !selectedBatch || !subjectName) {
+      setErrorMsg('Please fill in all fields');
+      setStatus('error');
+      setTimeout(() => setStatus('idle'), 3000);
+      return;
+    }
+
     setStatus('assigning');
     setErrorMsg('');
 
@@ -80,6 +210,25 @@ export default function AssignSubjects() {
     }
   };
 
+  // Teacher dropdown needs special handling (id vs name)
+  const [teacherDropdownOpen, setTeacherDropdownOpen] = useState(false);
+  const teacherRef = useRef<HTMLDivElement>(null);
+  const teacherListRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (teacherRef.current && !teacherRef.current.contains(e.target as Node)) setTeacherDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  useEffect(() => {
+    if (teacherDropdownOpen && teacherListRef.current) {
+      gsap.fromTo(teacherListRef.current, { opacity: 0, y: -8 }, { opacity: 1, y: 0, duration: 0.25, ease: 'power2.out' });
+    }
+  }, [teacherDropdownOpen]);
+
   return (
     <div ref={containerRef} className="max-w-4xl mx-auto pb-24">
       
@@ -101,69 +250,89 @@ export default function AssignSubjects() {
 
         <form onSubmit={handleAssignSubmit} className="space-y-6">
           
-          {/* Step 1: Select Teacher */}
+          {/* Step 1: Select Teacher (custom dropdown) */}
           <div>
             <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
               <UserCheck className="w-4 h-4 mr-1.5 text-gray-400" /> 1. Select Faculty Member
             </label>
-            <div className="relative">
-              <select 
-                required
-                className="w-full appearance-none bg-gray-50 border border-gray-200 text-gray-900 py-3.5 px-4 pr-10 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all"
-                value={selectedTeacher}
-                onChange={(e) => setSelectedTeacher(e.target.value)}
+            <div ref={teacherRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setTeacherDropdownOpen(!teacherDropdownOpen)}
+                className={`w-full text-left flex items-center justify-between py-3.5 px-4 rounded-xl border-2 transition-all duration-200 ${
+                  teacherDropdownOpen
+                    ? 'border-blue-500 bg-white shadow-[0_0_0_3px_rgba(59,130,246,0.15)]'
+                    : selectedTeacher
+                      ? 'border-gray-200 bg-white'
+                      : 'border-gray-200 bg-gray-50'
+                }`}
               >
-                <option value="" disabled>Choose a teacher...</option>
-                {teachers.map(t => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+                <span className={`text-sm ${selectedTeacher ? 'text-gray-900 font-medium' : 'text-gray-400'}`}>
+                  {selectedTeacherName || 'Choose a teacher...'}
+                </span>
+                {teacherDropdownOpen ? (
+                  <ChevronUp className="w-5 h-5 text-blue-500" />
+                ) : (
+                  <ChevronDown className="w-5 h-5 text-gray-400" />
+                )}
+              </button>
+
+              {teacherDropdownOpen && (
+                <div
+                  ref={teacherListRef}
+                  className="absolute z-50 top-full left-0 w-full mt-2 bg-white rounded-xl border-2 border-blue-500 shadow-xl overflow-hidden max-h-64 overflow-y-auto"
+                >
+                  {teachers.length === 0 ? (
+                    <div className="px-4 py-6 text-center text-gray-400 text-sm">
+                      No teachers registered yet.
+                    </div>
+                  ) : (
+                    teachers.map(t => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedTeacher(t.id);
+                          setSelectedTeacherName(t.name);
+                          setTeacherDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-4 py-3 text-sm transition-colors border-b border-gray-50 last:border-0 ${
+                          t.id === selectedTeacher
+                            ? 'text-blue-600 font-semibold bg-blue-50/60'
+                            : 'text-gray-800 hover:bg-gray-50'
+                        }`}
+                      >
+                        {t.name}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            {/* Step 2: Class */}
-            <div>
-              <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
-                <Layers className="w-4 h-4 mr-1.5 text-gray-400" /> 2. Select Class / Standard
-              </label>
-              <div className="relative">
-                <select 
-                  required
-                  className="w-full appearance-none bg-gray-50 border border-gray-200 text-gray-900 py-3.5 px-4 pr-10 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all"
-                  value={selectedClass}
-                  onChange={(e) => setSelectedClass(e.target.value)}
-                >
-                  <option value="" disabled>Choose a class...</option>
-                  {CLASS_OPTIONS.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-              </div>
-            </div>
+            {/* Step 2: Class (grouped by school division) */}
+            <CustomDropdown
+              label="Select Class / Standard"
+              icon={Layers}
+              step="2"
+              value={selectedClass}
+              onChange={setSelectedClass}
+              placeholder="Choose a class..."
+              grouped={CLASS_GROUPS}
+            />
 
             {/* Step 3: Batch */}
-            <div>
-              <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
-                <Users className="w-4 h-4 mr-1.5 text-gray-400" /> 3. Select Batch
-              </label>
-              <div className="relative">
-                <select 
-                  required
-                  className="w-full appearance-none bg-gray-50 border border-gray-200 text-gray-900 py-3.5 px-4 pr-10 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all"
-                  value={selectedBatch}
-                  onChange={(e) => setSelectedBatch(e.target.value)}
-                >
-                  <option value="" disabled>Choose a batch...</option>
-                  {BATCH_OPTIONS.map(b => (
-                    <option key={b} value={b}>{b}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-              </div>
-            </div>
+            <CustomDropdown
+              label="Select Batch"
+              icon={Users}
+              step="3"
+              value={selectedBatch}
+              onChange={setSelectedBatch}
+              placeholder="Choose a batch..."
+              options={BATCH_OPTIONS}
+            />
           </div>
 
           {/* Step 4: Subject Name */}
@@ -177,7 +346,7 @@ export default function AssignSubjects() {
               value={subjectName}
               onChange={(e) => setSubjectName(e.target.value)}
               placeholder="e.g., Economics, Mathematics, Physics"
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 transition-all"
+              className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] transition-all"
             />
           </div>
 
