@@ -11,14 +11,12 @@ interface Teacher {
 
 // Full Pallikoodam school structure from pallikoodam.org
 const CLASS_GROUPS = [
-  { label: 'Play School (Kalari)', options: ['Nursery', 'LKG', 'UKG'] },
+  { label: 'Play School (Kalari)', options: ['Nursery'] },
   { label: 'Junior School', options: ['Class 1', 'Class 2', 'Class 3', 'Class 4'] },
   { label: 'Middle School', options: ['Class 5', 'Class 6', 'Class 7', 'Class 8'] },
   { label: 'High School (ICSE)', options: ['Class 9', 'Class 10'] },
   { label: 'ISC', options: ['Class 11', 'Class 12'] },
 ];
-
-const BATCH_OPTIONS = ['Batch A', 'Batch B', 'Batch C'];
 
 // Custom dropdown component matching the design reference
 function CustomDropdown({ 
@@ -324,15 +322,18 @@ export default function AssignSubjects() {
             />
 
             {/* Step 3: Batch */}
-            <CustomDropdown
-              label="Select Batch"
-              icon={Users}
-              step="3"
-              value={selectedBatch}
-              onChange={setSelectedBatch}
-              placeholder="Choose a batch..."
-              options={BATCH_OPTIONS}
-            />
+            <div>
+              <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                <Users className="w-4 h-4 mr-1.5 text-gray-400" /> 3. Batch / Section Name
+              </label>
+              <input
+                type="text"
+                value={selectedBatch}
+                onChange={(e) => setSelectedBatch(e.target.value)}
+                placeholder="e.g., Section A, Batch B, Morning"
+                className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] transition-all"
+              />
+            </div>
           </div>
 
           {/* Step 4: Subject Name */}

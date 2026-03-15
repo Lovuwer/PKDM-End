@@ -71,7 +71,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Live Search */}
-        <div className="relative w-full md:w-96 z-20">
+        <div className="relative w-full md:w-96 z-30">
           <div className="flex items-center px-4 py-3 bg-white rounded-2xl shadow-soft border border-soft transition-all focus-within:ring-2 focus-within:ring-gray-900 focus-within:border-transparent">
             <Search className="w-5 h-5 text-gray-400 mr-3 flex-shrink-0" />
             <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
@@ -80,7 +80,7 @@ export default function AdminDashboard() {
           </div>
 
           <div ref={dropdownRef}
-            className={`absolute top-full left-0 w-full mt-2 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden ${showDropdown ? 'block' : 'hidden'}`}>
+            className={`absolute top-full left-0 w-full mt-2 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-40 ${showDropdown ? 'block' : 'hidden'}`}>
             {filteredTeachers.length > 0 ? (
               filteredTeachers.map((teacher) => (
                 <button key={teacher.id} onClick={() => handleSelectTeacher(teacher.id)}
