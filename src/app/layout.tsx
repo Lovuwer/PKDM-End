@@ -7,6 +7,7 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 export const metadata: Metadata = {
   title: 'Pallikoodam - Faculty Portal',
   description: 'Manage yearly and weekly lesson plans',
+  icons: { icon: '/icon.png', apple: '/icon.png' },
 };
 
 export default function RootLayout({

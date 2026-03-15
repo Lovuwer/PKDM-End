@@ -1,11 +1,33 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { LogOut, BookOpen, Calendar, LayoutDashboard } from 'lucide-react';
 
 export default function TeacherLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [userName, setUserName] = useState('');
+
+  useEffect(() => {
+    const stored = localStorage.getItem('pallikoodam_user');
+    if (stored) {
+      try {
+        const user = JSON.parse(stored);
+        setUserName(user.name || '');
+      } catch {
+        setUserName('');
+      }
+    }
+  }, []);
+
+  const handleSignOut = () => {
+    localStorage.removeItem('pallikoodam_user');
+    router.push('/');
+  };
+
+  const initial = userName ? userName.charAt(0).toUpperCase() : '?';
 
   const navItems = [
     { name: 'Dashboard', href: '/teacher/dashboard', icon: LayoutDashboard },
@@ -47,19 +69,19 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
 
           <div className="flex items-center space-x-4">
             <div className="flex items-center text-sm font-medium text-gray-700">
-              <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center mr-2 text-gray-600 border border-gray-200">
-                F
+              <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center mr-2 text-gray-600 border border-gray-200 font-semibold">
+                {initial}
               </div>
-              <span className="hidden sm:inline">Febin Thomas</span>
+              <span className="hidden sm:inline">{userName || 'Teacher'}</span>
             </div>
             <div className="w-px h-6 bg-gray-200 mx-2"></div>
-            <Link
-              href="/"
+            <button
+              onClick={handleSignOut}
               className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
               title="Sign Out"
             >
               <LogOut className="w-5 h-5" />
-            </Link>
+            </button>
           </div>
 
         </div>
