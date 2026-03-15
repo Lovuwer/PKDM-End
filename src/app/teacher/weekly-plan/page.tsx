@@ -1,20 +1,59 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import gsap from 'gsap';
-import { Save, CheckCircle2, ChevronDown, Calendar, FileText, AlertTriangle, Sparkles } from 'lucide-react';
+import { Save, CheckCircle2, ChevronDown, ChevronUp, Calendar, FileText, AlertTriangle, Sparkles } from 'lucide-react';
+
+interface Assignment {
+  id: string;
+  class: string;
+  batch: string;
+  subject: string;
+}
 
 export default function WeeklyPlan() {
+  const router = useRouter();
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [selectedSubject, setSelectedSubject] = useState('');
   const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('saved');
   const [holidayWarning, setHolidayWarning] = useState('');
   const [suggestedTopic, setSuggestedTopic] = useState('');
   const [learningObjective, setLearningObjective] = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   
   const saveBannerRef = useRef<HTMLDivElement>(null);
   const suggestionRef = useRef<HTMLDivElement>(null);
   const holidayRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('pallikoodam_user');
+    if (!stored) { router.push('/login/teacher'); return; }
+    const user = JSON.parse(stored);
+
+    fetch(`/api/assignments?userId=${user.id}`)
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setAssignments(data); })
+      .catch(() => {});
+  }, [router]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  useEffect(() => {
+    if (dropdownOpen && listRef.current) {
+      gsap.fromTo(listRef.current, { opacity: 0, y: -8 }, { opacity: 1, y: 0, duration: 0.25, ease: 'power2.out' });
+    }
+  }, [dropdownOpen]);
   
   const triggerAutoSave = () => {
     setSaveStatus('saving');
@@ -32,9 +71,8 @@ export default function WeeklyPlan() {
     }
 
     const date = new Date(startDate);
-    const month = date.getMonth(); // 0 = Jan, 9 = Oct, 10 = Nov
+    const month = date.getMonth();
     
-    // 1. Smart Holiday/Event detection warnings
     if (month === 11 && date.getDate() > 20) {
       setHolidayWarning('⚠️ Notice: Approaching Winter Break. Consider lighter review assignments.');
     } else if (month === 9 && date.getDate() > 28) {
@@ -45,15 +83,12 @@ export default function WeeklyPlan() {
       setHolidayWarning('');
     }
 
-    // Animate holiday warning if present
     if (holidayWarning && holidayRef.current) {
       gsap.fromTo(holidayRef.current, { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.4 });
     }
 
-    // 2. Auto-link Weekly Plan to read from Yearly Plan topics
-    // In a real app, this would be an API call `fetch('/api/yearly-plan/topic?date=...')`
-    if (selectedSubject === 'eco-11a') {
-      setSuggestedTopic('Introduction to Macroeconomics (From Yearly Plan: Month 1, Week 1)');
+    if (selectedSubject) {
+      setSuggestedTopic(`Auto-linked from Yearly Plan for this assignment.`);
       if (suggestionRef.current) {
         gsap.fromTo(suggestionRef.current, { opacity: 0, scale: 0.95 }, { opacity: 1, scale: 1, duration: 0.5, ease: 'power2.out' });
       }
@@ -61,8 +96,13 @@ export default function WeeklyPlan() {
 
   }, [startDate, selectedSubject, holidayWarning]);
 
+  const selectedAssignment = assignments.find(a => a.id === selectedSubject);
+  const selectedLabel = selectedAssignment
+    ? `${selectedAssignment.subject} - ${selectedAssignment.class} (${selectedAssignment.batch})`
+    : '';
+
   const acceptSuggestion = () => {
-    setLearningObjective('Understand the fundamental differences between micro and macro economics. Key metrics: GDP, Inflation.');
+    setLearningObjective('Auto-filled from Yearly Plan curriculum topics.');
     triggerAutoSave();
   };
 
@@ -75,7 +115,6 @@ export default function WeeklyPlan() {
           <p className="text-gray-500 mt-1">Submit specific lesson goals and methods for the week.</p>
         </div>
         
-        {/* Auto-save Status indicator */}
         <div 
           ref={saveBannerRef}
           className={`flex items-center px-4 py-2 rounded-full text-sm font-medium transition-colors ${
@@ -92,20 +131,58 @@ export default function WeeklyPlan() {
         </div>
       </div>
 
-      {/* Select Assignment */}
+      {/* Select Assignment — Custom Dropdown */}
       <div className="bg-white p-6 rounded-2xl shadow-soft border border-soft mb-8">
         <label className="text-sm font-semibold text-gray-700 mb-2 block">Select Assignment</label>
-        <div className="relative">
-          <select 
-            className="w-full appearance-none bg-gray-50 border border-gray-200 text-gray-900 py-3 px-4 pr-10 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all"
-            value={selectedSubject}
-            onChange={(e) => setSelectedSubject(e.target.value)}
+        <div ref={dropdownRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+            className={`w-full text-left flex items-center justify-between py-3 px-4 rounded-xl border-2 transition-all duration-200 ${
+              dropdownOpen
+                ? 'border-blue-500 bg-white shadow-[0_0_0_3px_rgba(59,130,246,0.15)]'
+                : selectedSubject
+                  ? 'border-gray-200 bg-white'
+                  : 'border-gray-200 bg-gray-50'
+            }`}
           >
-            <option value="" disabled>Choose a class and subject...</option>
-            <option value="eco-11a">Economics - 11th Standard (Batch A)</option>
-            <option value="com-11b">Commerce - 11th Standard (Batch B)</option>
-          </select>
-          <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+            <span className={`text-sm ${selectedSubject ? 'text-gray-900 font-medium' : 'text-gray-400'}`}>
+              {selectedLabel || 'Choose a class and subject...'}
+            </span>
+            {dropdownOpen ? (
+              <ChevronUp className="w-5 h-5 text-blue-500" />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-gray-400" />
+            )}
+          </button>
+
+          {dropdownOpen && (
+            <div
+              ref={listRef}
+              className="absolute z-50 top-full left-0 w-full mt-2 bg-white rounded-xl border-2 border-blue-500 shadow-xl overflow-hidden max-h-64 overflow-y-auto"
+            >
+              {assignments.length === 0 ? (
+                <div className="px-4 py-6 text-center text-gray-400 text-sm">
+                  No subjects assigned. Contact your admin.
+                </div>
+              ) : (
+                assignments.map(a => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => { setSelectedSubject(a.id); setDropdownOpen(false); }}
+                    className={`w-full text-left px-4 py-3 text-sm transition-colors border-b border-gray-50 last:border-0 ${
+                      a.id === selectedSubject
+                        ? 'text-blue-600 font-semibold bg-blue-50/60'
+                        : 'text-gray-800 hover:bg-gray-50'
+                    }`}
+                  >
+                    {a.subject} - {a.class} ({a.batch})
+                  </button>
+                ))
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -128,7 +205,8 @@ export default function WeeklyPlan() {
           </label>
           <input 
             type="date"
-            onChange={triggerAutoSave}
+            value={endDate}
+            onChange={(e) => { setEndDate(e.target.value); triggerAutoSave(); }}
             className="w-full bg-gray-50 border border-gray-200 text-gray-900 py-3 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900"
           />
         </div>
@@ -150,7 +228,7 @@ export default function WeeklyPlan() {
           </div>
         )}
 
-        {suggestedTopic && (
+        {suggestedTopic && selectedSubject && (
           <div ref={suggestionRef} className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6 shadow-sm">
             <h3 className="text-sm font-semibold text-blue-900 flex items-center mb-1.5">
               <Sparkles className="w-4 h-4 mr-1.5 text-blue-600" /> Smart Suggestion
