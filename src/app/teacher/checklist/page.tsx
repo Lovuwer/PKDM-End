@@ -23,7 +23,19 @@ const STORAGE_KEY = 'pallikoodam_checklist';
 export default function ChecklistPage() {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
-  const [items, setItems] = useState<ChecklistItem[]>([]);
+  const [items, setItems] = useState<ChecklistItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {
+          return [];
+        }
+      }
+    }
+    return [];
+  });
   const [newText, setNewText] = useState('');
   const [newCategory, setNewCategory] = useState('Academic');
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
@@ -31,11 +43,6 @@ export default function ChecklistPage() {
   useEffect(() => {
     const stored = localStorage.getItem('pallikoodam_user');
     if (!stored) { router.push('/login/teacher'); return; }
-
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try { setItems(JSON.parse(saved)); } catch { setItems([]); }
-    }
 
     const ctx = gsap.context(() => {
       gsap.fromTo('.cl-animate', { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6, stagger: 0.08, ease: 'power2.out' });

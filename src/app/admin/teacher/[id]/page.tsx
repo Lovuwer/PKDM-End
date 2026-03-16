@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, use } from 'react';
 import Link from 'next/link';
 import gsap from 'gsap';
-import { ArrowLeft, Download, FileText, CheckCircle2, Clock, CalendarDays, Sheet, Loader2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, Clock, Loader2, CalendarDays, CheckCircle2, FileText, Sheet } from 'lucide-react';
 import { getSubjectIcon } from '@/lib/subjectIcons';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -16,11 +16,15 @@ interface Assignment {
   subject: string;
 }
 
+interface DraftData {
+  [month: string]: Record<string, string>;
+}
+
 interface Teacher {
   id: string;
   name: string;
   assignments: Assignment[];
-  yearlyPlans: { id: string; class: string; subject: string; status: string; draftData: any }[];
+  yearlyPlans: { id: string; class: string; subject: string; status: string; draftData: DraftData }[];
   weeklyPlans: { id: string; class: string; subject: string; status: string }[];
 }
 
@@ -72,8 +76,8 @@ export default function TeacherProfile({ params }: { params: Promise<{ id: strin
     const plan = teacher?.yearlyPlans.find(p => p.subject === assignment.subject);
     const rows: string[][] = [];
     if (plan?.draftData && typeof plan.draftData === 'object') {
-      Object.entries(plan.draftData).forEach(([month, weeks]: [string, any]) => {
-        Object.entries(weeks).forEach(([week, topic]: [string, any]) => {
+      Object.entries(plan.draftData).forEach(([month, weeks]: [string, Record<string, string>]) => {
+        Object.entries(weeks).forEach(([week, topic]: [string, string]) => {
           rows.push([month, week.replace('week', 'Week '), String(topic), '']);
         });
       });
@@ -116,8 +120,8 @@ export default function TeacherProfile({ params }: { params: Promise<{ id: strin
       ];
 
       if (plan?.draftData && typeof plan.draftData === 'object') {
-        Object.entries(plan.draftData).forEach(([month, weeks]: [string, any]) => {
-          Object.entries(weeks).forEach(([week, topic]: [string, any]) => {
+        Object.entries(plan.draftData).forEach(([month, weeks]: [string, Record<string, string>]) => {
+          Object.entries(weeks as Record<string, string>).forEach(([week, topic]) => {
             sheet.addRow({ month, week: week.replace('week', 'Week '), topic: String(topic), objective: '' });
           });
         });

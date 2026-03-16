@@ -30,7 +30,7 @@ function CustomDropdown({
   grouped 
 }: {
   label: string;
-  icon: React.ComponentType<any>;
+  icon: React.ElementType;
   step: string;
   value: string;
   onChange: (val: string) => void;

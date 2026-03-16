@@ -22,6 +22,7 @@ interface YearlyPlan {
   class: string;
   subject: string;
   status: string;
+  draftData?: unknown;
 }
 
 export default function TeacherDashboard() {
@@ -30,7 +31,19 @@ export default function TeacherDashboard() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [yearlyPlans, setYearlyPlans] = useState<YearlyPlan[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userName, setUserName] = useState('');
+  const [userName] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('pallikoodam_user');
+      if (stored) {
+        try {
+          return JSON.parse(stored).name || '';
+        } catch {
+          return '';
+        }
+      }
+    }
+    return '';
+  });
 
   useEffect(() => {
     // Check auth
@@ -40,7 +53,6 @@ export default function TeacherDashboard() {
       return;
     }
     const user = JSON.parse(stored);
-    setUserName(user.name);
 
     // Fetch real data
     Promise.all([
@@ -69,12 +81,12 @@ export default function TeacherDashboard() {
 
   const handleExport = async (subjectName: string, format: 'pdf' | 'excel') => {
     const plan = yearlyPlans.find(p => p.subject === subjectName);
-    const planData = plan ? (plan as any).draftData : null;
+    const planData = plan ? plan.draftData : null;
 
     const rows: string[][] = [];
     if (planData && typeof planData === 'object') {
-      Object.entries(planData).forEach(([month, weeks]: [string, any]) => {
-        Object.entries(weeks).forEach(([week, topic]: [string, any]) => {
+      Object.entries(planData as Record<string, Record<string, string>>).forEach(([month, weeks]) => {
+        Object.entries(weeks).forEach(([week, topic]) => {
           rows.push([month, week.replace('week', 'Week '), String(topic), '']);
         });
       });

@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 
 // Maps subject names (lowercase) to their specific lucide icon component
-const SUBJECT_ICON_MAP: Record<string, React.ComponentType<any>> = {
+const SUBJECT_ICON_MAP: Record<string, React.ElementType> = {
   'mathematics': Calculator,
   'maths': Calculator,
   'economics': LineChart,

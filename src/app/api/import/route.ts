@@ -18,8 +18,10 @@ export async function POST(request: Request) {
     const fileName = file.name.toLowerCase();
     if (fileName.endsWith('.csv')) {
       const { Readable } = await import('stream');
-      await workbook.csv.read(Readable.from(buffer) as any);
+      // @ts-ignore
+      await workbook.csv.read(Readable.from(buffer as unknown as Iterable<any>));
     } else {
+      // @ts-ignore
       await workbook.xlsx.load(buffer as any);
     }
 

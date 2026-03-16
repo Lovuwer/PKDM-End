@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import gsap from 'gsap';
-import { Save, CheckCircle2, ChevronDown, ChevronUp, CalendarDays, RotateCcw, Loader2, AlertCircle } from 'lucide-react';
+import { Save, CheckCircle2, ChevronDown, ChevronUp, CalendarDays, RotateCcw, Loader2, AlertCircle, Upload, Sparkles, X } from 'lucide-react';
 
 interface Assignment {
   id: string;
@@ -26,26 +26,47 @@ export default function YearlyPlan() {
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [userId, setUserId] = useState('');
+  const [userId] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('pallikoodam_user');
+      if (stored) {
+        try {
+          return JSON.parse(stored).id || '';
+        } catch {
+          return '';
+        }
+      }
+    }
+    return '';
+  });
 
   // Track ALL textarea values: { "June_1": "topic...", "June_2": "...", ... }
   const [planData, setPlanData] = useState<Record<string, string>>({});
+
+  // AI Upload state
+  const [aiFile, setAiFile] = useState<File | null>(null);
+  const [aiStatus, setAiStatus] = useState<'idle' | 'parsing' | 'success' | 'error'>('idle');
+  const [aiError, setAiError] = useState('');
   
   const saveBannerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
+  // Keep track of auth redirect
   useEffect(() => {
     const stored = localStorage.getItem('pallikoodam_user');
-    if (!stored) { router.push('/login/teacher'); return; }
-    const user = JSON.parse(stored);
-    setUserId(user.id);
+    if (!stored) {
+      router.push('/login/teacher');
+    }
+  }, [router]);
 
-    fetch(`/api/assignments?userId=${user.id}`)
+  useEffect(() => {
+    if (!userId) return;
+    fetch(`/api/assignments?userId=${userId}`)
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setAssignments(data); })
       .catch(() => {});
-  }, [router]);
+  }, [userId]);
 
   // Load existing plan data when assignment is selected
   useEffect(() => {
@@ -165,6 +186,40 @@ export default function YearlyPlan() {
     setExpandedMonth(expandedMonth === month ? null : month);
   };
 
+  const handleAiUpload = async () => {
+    if (!aiFile || !selectedSubject || !userId) return;
+    setAiStatus('parsing');
+    setAiError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', aiFile);
+      const res = await fetch('/api/ai/parse-syllabus', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (res.ok && data.success && data.draftData) {
+        setPlanData(data.draftData);
+        setAiStatus('success');
+        // Auto-save to API
+        const assignment = assignments.find(a => a.id === selectedSubject);
+        if (assignment) {
+          await fetch('/api/plans/yearly', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, className: assignment.class, subject: assignment.subject, draftData: data.draftData, status: 'DRAFT' })
+          });
+        }
+        setTimeout(() => { setAiStatus('idle'); setAiFile(null); }, 3000);
+      } else {
+        setAiError(data.error || 'AI processing failed');
+        setAiStatus('error');
+        setTimeout(() => setAiStatus('idle'), 5000);
+      }
+    } catch {
+      setAiError('Network error. Please try again.');
+      setAiStatus('error');
+      setTimeout(() => setAiStatus('idle'), 5000);
+    }
+  };
+
   const selectedAssignment = assignments.find(a => a.id === selectedSubject);
   const selectedLabel = selectedAssignment
     ? `${selectedAssignment.subject} - ${selectedAssignment.class} (${selectedAssignment.batch})`
@@ -229,6 +284,66 @@ export default function YearlyPlan() {
           )}
         </div>
       </div>
+
+      {/* AI Syllabus Upload Zone */}
+      {selectedSubject && (
+        <div className="bg-gradient-to-r from-violet-50 to-blue-50 rounded-2xl border border-violet-200 p-4 sm:p-6 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center">
+              <div className="w-9 h-9 rounded-lg bg-violet-100 border border-violet-200 flex items-center justify-center mr-3">
+                <Sparkles className="w-5 h-5 text-violet-700" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-violet-900">AI Syllabus Parser</h3>
+                <p className="text-xs text-violet-600">Upload a CISCE syllabus PDF to auto-generate your yearly plan</p>
+              </div>
+            </div>
+            {aiFile && (
+              <button onClick={() => { setAiFile(null); setAiStatus('idle'); }} className="p-1.5 text-violet-400 hover:text-violet-700 rounded-lg hover:bg-violet-100 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          {!aiFile ? (
+            <label className="flex items-center justify-center border-2 border-dashed border-violet-300 rounded-xl py-5 cursor-pointer hover:border-violet-400 hover:bg-violet-50/50 transition-all">
+              <input type="file" accept=".pdf" className="hidden" onChange={(e) => { if (e.target.files?.[0]) setAiFile(e.target.files[0]); }} />
+              <Upload className="w-5 h-5 text-violet-400 mr-2" />
+              <span className="text-sm text-violet-600 font-medium">Drop PDF here or click to browse</span>
+            </label>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center bg-white rounded-xl px-4 py-3 border border-violet-200">
+                <div className="w-8 h-8 rounded-lg bg-red-50 border border-red-200 flex items-center justify-center mr-3 text-xs font-bold text-red-700">PDF</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{aiFile.name}</p>
+                  <p className="text-xs text-gray-400">{(aiFile.size / 1024).toFixed(1)} KB</p>
+                </div>
+              </div>
+
+              {aiStatus === 'success' && (
+                <div className="flex items-center text-sm text-green-700 bg-green-50 px-4 py-3 rounded-xl border border-green-200">
+                  <CheckCircle2 className="w-4 h-4 mr-2" /> Syllabus parsed! Review the auto-filled plan below and edit as needed.
+                </div>
+              )}
+              {aiStatus === 'error' && (
+                <div className="flex items-center text-sm text-red-700 bg-red-50 px-4 py-3 rounded-xl border border-red-200">
+                  <AlertCircle className="w-4 h-4 mr-2" /> {aiError}
+                </div>
+              )}
+
+              <button onClick={handleAiUpload} disabled={aiStatus === 'parsing'}
+                className="w-full bg-violet-600 hover:bg-violet-700 text-white py-3 rounded-xl font-medium transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center">
+                {aiStatus === 'parsing' ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> AI is analyzing your syllabus...</>
+                ) : (
+                  <><Sparkles className="w-4 h-4 mr-2" /> Generate Yearly Plan with AI</>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Accordion Months */}
       <div className="space-y-4">

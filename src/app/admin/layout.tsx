@@ -9,8 +9,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [userName] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('pallikoodam_user');
+      if (stored) {
+        try {
+          return JSON.parse(stored).name || '';
+        } catch {
+          return '';
+        }
+      }
+    }
+    return '';
+  });
 
-  useEffect(() => { setMobileMenuOpen(false); }, [pathname]);
+
 
   const navItems = [
     { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },

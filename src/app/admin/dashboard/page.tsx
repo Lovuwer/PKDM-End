@@ -16,7 +16,6 @@ interface Teacher {
 export default function AdminDashboard() {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
-  const [showDropdown, setShowDropdown] = useState(false);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -38,10 +37,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (searchTerm.length > 0) {
-      setShowDropdown(true);
       gsap.fromTo(dropdownRef.current, { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.3, ease: 'power2.out' });
-    } else {
-      setShowDropdown(false);
     }
   }, [searchTerm]);
 
@@ -80,7 +76,7 @@ export default function AdminDashboard() {
           </div>
 
           <div ref={dropdownRef}
-            className={`absolute top-full left-0 w-full mt-2 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-40 ${showDropdown ? 'block' : 'hidden'}`}>
+            className={`absolute top-full left-0 w-full mt-2 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-40 ${searchTerm.length > 0 ? 'block' : 'hidden'}`}>
             {filteredTeachers.length > 0 ? (
               filteredTeachers.map((teacher) => (
                 <button key={teacher.id} onClick={() => handleSelectTeacher(teacher.id)}

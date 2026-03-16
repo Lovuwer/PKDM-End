@@ -8,17 +8,22 @@ import { LogOut, BookOpen, Calendar, LayoutDashboard, Menu, X, CheckSquare } fro
 export default function TeacherLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [userName, setUserName] = useState('');
+  const [userName] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('pallikoodam_user');
+      if (stored) {
+        try {
+          return JSON.parse(stored).name || '';
+        } catch {
+          return '';
+        }
+      }
+    }
+    return '';
+  });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  useEffect(() => {
-    const stored = localStorage.getItem('pallikoodam_user');
-    if (stored) {
-      try { setUserName(JSON.parse(stored).name || ''); } catch { setUserName(''); }
-    }
-  }, []);
 
-  useEffect(() => { setMobileMenuOpen(false); }, [pathname]);
 
   const handleSignOut = () => {
     localStorage.removeItem('pallikoodam_user');

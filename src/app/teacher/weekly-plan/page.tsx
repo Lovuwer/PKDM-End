@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import gsap from 'gsap';
-import { Save, CheckCircle2, ChevronDown, ChevronUp, Calendar, FileText, AlertTriangle, Sparkles, Loader2, AlertCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Sparkles, X, Loader2, CheckCircle2, AlertCircle, Save } from 'lucide-react';
+import { getFieldLabels } from '@/lib/fieldConfig';
 
 interface Assignment {
   id: string;
@@ -12,47 +13,202 @@ interface Assignment {
   subject: string;
 }
 
+interface WeeklyPlanData {
+  id: string;
+  class: string;
+  subject: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  learningObjective?: string;
+  teachingMethod?: string;
+  field1?: string;
+  field2?: string;
+  field3?: string;
+  field4?: string;
+}
+
+interface YearlyPlanData {
+  draftData?: Record<string, string>;
+}
+
+const ACADEMIC_MONTHS = [
+  { name: 'June', year: 2025, month: 5 },
+  { name: 'July', year: 2025, month: 6 },
+  { name: 'August', year: 2025, month: 7 },
+  { name: 'September', year: 2025, month: 8 },
+  { name: 'October', year: 2025, month: 9 },
+  { name: 'November', year: 2025, month: 10 },
+  { name: 'December', year: 2025, month: 11 },
+  { name: 'January', year: 2026, month: 0 },
+  { name: 'February', year: 2026, month: 1 },
+  { name: 'March', year: 2026, month: 2 },
+];
+
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function getWeeksOfMonth(year: number, month: number) {
+  const weeks: { start: Date; end: Date; days: (Date | null)[] }[] = [];
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  
+  const currentWeekStart = new Date(firstDay);
+  // Adjust to Monday
+  const dayOfWeek = currentWeekStart.getDay();
+  if (dayOfWeek === 0) currentWeekStart.setDate(currentWeekStart.getDate() - 6);
+  else if (dayOfWeek !== 1) currentWeekStart.setDate(currentWeekStart.getDate() - (dayOfWeek - 1));
+
+  while (currentWeekStart <= lastDay || currentWeekStart.getMonth() === month) {
+    const days: (Date | null)[] = [];
+    const weekEnd = new Date(currentWeekStart);
+    weekEnd.setDate(weekEnd.getDate() + 5); // Mon-Sat
+
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(currentWeekStart);
+      d.setDate(d.getDate() + i);
+      if (d.getMonth() === month) {
+        days.push(new Date(d));
+      } else {
+        days.push(null);
+      }
+    }
+
+    if (days.some(d => d !== null)) {
+      weeks.push({
+        start: new Date(currentWeekStart),
+        end: weekEnd,
+        days
+      });
+    }
+
+    currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+    if (weeks.length >= 6) break;
+  }
+  return weeks;
+}
+
+function formatDate(d: Date) {
+  return d.toISOString().split('T')[0];
+}
+
+function getWeekStatus(weekStart: Date, weekEnd: Date, plans: WeeklyPlanData[]): 'submitted' | 'draft' | 'empty' {
+  const ws = formatDate(weekStart);
+  const we = formatDate(weekEnd);
+  for (const plan of plans) {
+    const ps = plan.startDate.split('T')[0];
+    const pe = plan.endDate.split('T')[0];
+    if (ps === ws || pe === we || (ps >= ws && ps <= we)) {
+      return plan.status === 'SUBMITTED' ? 'submitted' : 'draft';
+    }
+  }
+  return 'empty';
+}
+
+function findPlanForWeek(weekStart: Date, weekEnd: Date, plans: WeeklyPlanData[]): WeeklyPlanData | null {
+  const ws = formatDate(weekStart);
+  const we = formatDate(weekEnd);
+  for (const plan of plans) {
+    const ps = plan.startDate.split('T')[0];
+    const pe = plan.endDate.split('T')[0];
+    if (ps === ws || pe === we || (ps >= ws && ps <= we)) {
+      return plan;
+    }
+  }
+  return null;
+}
+
 export default function WeeklyPlan() {
   const router = useRouter();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  const [userId] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('pallikoodam_user');
+      if (stored) {
+        try {
+          return JSON.parse(stored).id || '';
+        } catch {
+          return '';
+        }
+      }
+    }
+    return '';
+  });
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [selectedSubject, setSelectedSubject] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('saved');
-  const [submitStatus, setSubmitStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
-  const [errorMsg, setErrorMsg] = useState('');
-  const [holidayWarning, setHolidayWarning] = useState('');
-  const [suggestedTopic, setSuggestedTopic] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [userId, setUserId] = useState('');
-
-  // Track all form field values
-  const [formData, setFormData] = useState({
-    learningObjective: '',
-    teachingMethod: '',
-    resources: '',
-    assessment: '',
-    homework: '',
-    differentiation: ''
-  });
-  
-  const saveBannerRef = useRef<HTMLDivElement>(null);
-  const suggestionRef = useRef<HTMLDivElement>(null);
-  const holidayRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
+  const [currentMonthIdx, setCurrentMonthIdx] = useState(0);
+  const [weeklyPlans, setWeeklyPlans] = useState<WeeklyPlanData[]>([]);
+  const [yearlyPlanData, setYearlyPlanData] = useState<Record<string, string>>({});
+
+  // Modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedWeek, setSelectedWeek] = useState<{ start: Date; end: Date } | null>(null);
+  const [formData, setFormData] = useState({
+    learningObjective: '',
+    teachingMethod: '',
+    field1: '',
+    field2: '',
+    field3: '',
+    field4: '',
+  });
+  const [submitStatus, setSubmitStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [smartSuggestion, setSmartSuggestion] = useState('');
+
+  // Keep track of auth redirect
   useEffect(() => {
     const stored = localStorage.getItem('pallikoodam_user');
-    if (!stored) { router.push('/login/teacher'); return; }
-    const user = JSON.parse(stored);
-    setUserId(user.id);
+    if (!stored) {
+      router.push('/login/teacher');
+    }
+  }, [router]);
 
-    fetch(`/api/assignments?userId=${user.id}`)
+  useEffect(() => {
+    if (!userId) return;
+    fetch(`/api/assignments?userId=${userId}`)
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setAssignments(data); })
       .catch(() => {});
-  }, [router]);
+  }, [userId]);
+
+  // Fetch existing weekly plans when assignment selected
+  const fetchPlans = useCallback(() => {
+    if (!userId || !selectedSubject) return;
+    const assignment = assignments.find(a => a.id === selectedSubject);
+    if (!assignment) return;
+    fetch(`/api/plans/weekly?userId=${userId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setWeeklyPlans(data.filter((p: WeeklyPlanData) => p.class === assignment.class && p.subject === assignment.subject));
+        }
+      })
+      .catch(() => {});
+  }, [userId, selectedSubject, assignments]);
+
+  useEffect(() => { fetchPlans(); }, [fetchPlans]);
+
+  // Fetch yearly plan for smart suggestions
+  useEffect(() => {
+    if (!userId || !selectedSubject) return;
+    const assignment = assignments.find(a => a.id === selectedSubject);
+    if (!assignment) return;
+    fetch(`/api/plans/yearly?userId=${userId}&class=${encodeURIComponent(assignment.class)}&subject=${encodeURIComponent(assignment.subject)}`)
+      .then(r => r.json())
+      .then((data: YearlyPlanData[]) => {
+        if (Array.isArray(data) && data.length > 0 && data[0].draftData) {
+          setYearlyPlanData(data[0].draftData as Record<string, string>);
+        } else {
+          setYearlyPlanData({});
+        }
+      })
+      .catch(() => setYearlyPlanData({}));
+  }, [userId, selectedSubject, assignments]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -67,67 +223,67 @@ export default function WeeklyPlan() {
       gsap.fromTo(listRef.current, { opacity: 0, y: -8 }, { opacity: 1, y: 0, duration: 0.25, ease: 'power2.out' });
     }
   }, [dropdownOpen]);
-  
-  const triggerAutoSave = () => {
-    setSaveStatus('saving');
-    setTimeout(() => {
-      setSaveStatus('saved');
-      if (saveBannerRef.current) {
-        gsap.fromTo(saveBannerRef.current, { scale: 0.95 }, { scale: 1, duration: 0.3, ease: 'back.out' });
-      }
-    }, 1500);
-  };
-
-  const updateField = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    triggerAutoSave();
-  };
 
   useEffect(() => {
-    if (!startDate) { setHolidayWarning(''); setSuggestedTopic(''); return; }
-    const date = new Date(startDate);
-    const month = date.getMonth();
-    
-    if (month === 11 && date.getDate() > 20) {
-      setHolidayWarning('⚠️ Notice: Approaching Winter Break. Consider lighter review assignments.');
-    } else if (month === 9 && date.getDate() > 28) {
-      setHolidayWarning('⚠️ Notice: Diwali holidays occur during this week. Less instruction time available.');
-    } else if (month === 8 && date.getDate() < 10) {
-      setHolidayWarning('⚠️ Notice: Onam week detected. Check school calendar for days off.');
+    if (containerRef.current) {
+      gsap.fromTo('.cal-animate', { opacity: 0, y: 15 }, { opacity: 1, y: 0, duration: 0.5, stagger: 0.08, ease: 'power2.out' });
+    }
+  }, []);
+
+  const openWeekModal = (weekStart: Date, weekEnd: Date) => {
+    setSelectedWeek({ start: weekStart, end: weekEnd });
+
+    // Check if plan exists for this week
+    const existingPlan = findPlanForWeek(weekStart, weekEnd, weeklyPlans);
+    if (existingPlan) {
+      setFormData({
+        learningObjective: existingPlan.learningObjective || '',
+        teachingMethod: existingPlan.teachingMethod || '',
+        field1: existingPlan.field1 || '',
+        field2: existingPlan.field2 || '',
+        field3: existingPlan.field3 || '',
+        field4: existingPlan.field4 || '',
+      });
     } else {
-      setHolidayWarning('');
+      setFormData({ learningObjective: '', teachingMethod: '', field1: '', field2: '', field3: '', field4: '' });
     }
 
-    if (holidayWarning && holidayRef.current) {
-      gsap.fromTo(holidayRef.current, { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.4 });
+    // Smart suggestion from yearly plan
+    const acMonth = ACADEMIC_MONTHS[currentMonthIdx];
+    if (acMonth) {
+      const weekNum = getWeeksOfMonth(acMonth.year, acMonth.month).findIndex(
+        w => formatDate(w.start) === formatDate(weekStart)
+      ) + 1;
+      const key = `${acMonth.name}_${weekNum}`;
+      const suggestion = yearlyPlanData[key];
+      setSmartSuggestion(suggestion || '');
     }
 
-    if (selectedSubject) {
-      setSuggestedTopic('Auto-linked from Yearly Plan for this assignment.');
-      if (suggestionRef.current) {
-        gsap.fromTo(suggestionRef.current, { opacity: 0, scale: 0.95 }, { opacity: 1, scale: 1, duration: 0.5, ease: 'power2.out' });
+    setModalOpen(true);
+    setSubmitStatus('idle');
+    setTimeout(() => {
+      if (modalRef.current) {
+        gsap.fromTo(modalRef.current, { x: '100%', opacity: 0 }, { x: '0%', opacity: 1, duration: 0.4, ease: 'power3.out' });
       }
-    }
-  }, [startDate, selectedSubject, holidayWarning]);
-
-  const selectedAssignment = assignments.find(a => a.id === selectedSubject);
-  const selectedLabel = selectedAssignment
-    ? `${selectedAssignment.subject} - ${selectedAssignment.class} (${selectedAssignment.batch})`
-    : '';
-
-  const acceptSuggestion = () => {
-    setFormData(prev => ({ ...prev, learningObjective: 'Auto-filled from Yearly Plan curriculum topics.' }));
-    triggerAutoSave();
+    }, 10);
   };
 
-  const handleSubmit = async () => {
-    const assignment = assignments.find(a => a.id === selectedSubject);
-    if (!assignment || !userId || !startDate) {
-      setErrorMsg('Please select an assignment and set the start date.');
-      setSubmitStatus('error');
-      setTimeout(() => setSubmitStatus('idle'), 3000);
-      return;
+  const closeModal = () => {
+    if (modalRef.current) {
+      gsap.to(modalRef.current, {
+        x: '100%', opacity: 0, duration: 0.3, ease: 'power2.in',
+        onComplete: () => { setModalOpen(false); setSelectedWeek(null); setSmartSuggestion(''); }
+      });
+    } else {
+      setModalOpen(false);
     }
+  };
+
+  const handleSubmit = async (status: 'DRAFT' | 'SUBMITTED') => {
+    if (!selectedWeek || !userId || !selectedSubject) return;
+    const assignment = assignments.find(a => a.id === selectedSubject);
+    if (!assignment) return;
+
     setSubmitStatus('submitting');
     try {
       const res = await fetch('/api/plans/weekly', {
@@ -137,19 +293,23 @@ export default function WeeklyPlan() {
           userId,
           className: assignment.class,
           subject: assignment.subject,
-          field1: formData.learningObjective,
-          field2: formData.teachingMethod,
-          field3: formData.resources,
-          field4: `${formData.assessment} | ${formData.homework} | ${formData.differentiation}`,
-          status: 'SUBMITTED'
+          startDate: formatDate(selectedWeek.start),
+          endDate: formatDate(selectedWeek.end),
+          learningObjective: formData.learningObjective,
+          teachingMethod: formData.teachingMethod,
+          field1: formData.field1,
+          field2: formData.field2,
+          field3: formData.field3,
+          field4: formData.field4,
+          status,
         })
       });
       if (res.ok) {
         setSubmitStatus('success');
-        setFormData({ learningObjective: '', teachingMethod: '', resources: '', assessment: '', homework: '', differentiation: '' });
-        setTimeout(() => setSubmitStatus('idle'), 3000);
+        fetchPlans();
+        setTimeout(() => closeModal(), 1500);
       } else {
-        setErrorMsg('Failed to submit plan.');
+        setErrorMsg('Failed to save plan.');
         setSubmitStatus('error');
         setTimeout(() => setSubmitStatus('idle'), 3000);
       }
@@ -160,26 +320,31 @@ export default function WeeklyPlan() {
     }
   };
 
+  const acceptSuggestion = () => {
+    setFormData(prev => ({ ...prev, learningObjective: smartSuggestion }));
+  };
+
+  const selectedAssignment = assignments.find(a => a.id === selectedSubject);
+  const selectedLabel = selectedAssignment
+    ? `${selectedAssignment.subject} - ${selectedAssignment.class} (${selectedAssignment.batch})`
+    : '';
+
+  const labels = getFieldLabels(selectedAssignment?.subject || '');
+  const currentAcademicMonth = ACADEMIC_MONTHS[currentMonthIdx];
+  const weeks = currentAcademicMonth ? getWeeksOfMonth(currentAcademicMonth.year, currentAcademicMonth.month) : [];
+
   return (
-    <div className="max-w-4xl mx-auto pb-24">
+    <div ref={containerRef} className="max-w-5xl mx-auto pb-8">
       
-      <div className="flex flex-col sm:flex-row items-start justify-between mb-8 gap-4">
+      <div className="flex flex-col sm:flex-row items-start justify-between mb-6 gap-4 cal-animate">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900 tracking-tight">Weekly Plan</h1>
-          <p className="text-gray-500 mt-1 text-sm">Submit specific lesson goals and methods for the week.</p>
-        </div>
-        <div 
-          ref={saveBannerRef}
-          className={`flex items-center px-4 py-2 rounded-full text-sm font-medium transition-colors flex-shrink-0 ${
-            saveStatus === 'saving' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-green-50 text-green-700 border border-green-200'
-          }`}
-        >
-          {saveStatus === 'saving' ? (<><Save className="w-4 h-4 mr-2 animate-pulse" /> Saving...</>) : (<><CheckCircle2 className="w-4 h-4 mr-2" /> Draft saved</>)}
+          <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900 tracking-tight">Weekly Planner</h1>
+          <p className="text-gray-500 mt-1 text-sm">Click any week on the calendar to create or edit your lesson plan.</p>
         </div>
       </div>
 
       {/* Select Assignment */}
-      <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-soft border border-soft mb-8">
+      <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-soft border border-soft mb-6 cal-animate">
         <label className="text-sm font-semibold text-gray-700 mb-2 block">Select Assignment</label>
         <div ref={dropdownRef} className="relative">
           <button type="button" onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -190,7 +355,7 @@ export default function WeeklyPlan() {
           {dropdownOpen && (
             <div ref={listRef} className="absolute z-50 top-full left-0 w-full mt-2 bg-white rounded-xl border-2 border-blue-500 shadow-xl overflow-hidden max-h-64 overflow-y-auto">
               {assignments.length === 0 ? (
-                <div className="px-4 py-6 text-center text-gray-400 text-sm">No subjects assigned. Contact your admin.</div>
+                <div className="px-4 py-6 text-center text-gray-400 text-sm">No subjects assigned.</div>
               ) : assignments.map(a => (
                 <button key={a.id} type="button" onClick={() => { setSelectedSubject(a.id); setDropdownOpen(false); }}
                   className={`w-full text-left px-4 py-3 text-sm transition-colors border-b border-gray-50 last:border-0 ${a.id === selectedSubject ? 'text-blue-600 font-semibold bg-blue-50/60' : 'text-gray-800 hover:bg-gray-50'}`}>
@@ -202,94 +367,180 @@ export default function WeeklyPlan() {
         </div>
       </div>
 
-      {/* Date Range */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-8">
-        <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-soft border border-soft">
-          <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center"><Calendar className="w-4 h-4 mr-2 text-gray-400" /> Start of Week</label>
-          <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); triggerAutoSave(); }}
-            className="w-full bg-gray-50 border border-gray-200 text-gray-900 py-3 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900" />
-        </div>
-        <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-soft border border-soft">
-          <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center"><Calendar className="w-4 h-4 mr-2 text-gray-400" /> End of Week</label>
-          <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); triggerAutoSave(); }}
-            className="w-full bg-gray-50 border border-gray-200 text-gray-900 py-3 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900" />
-        </div>
-      </div>
-
-      {/* Form Fields */}
-      <div className="bg-white rounded-2xl shadow-soft border border-soft p-4 sm:p-8 space-y-6">
-        <div className="flex items-center mb-4">
-          <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center mr-4"><FileText className="w-5 h-5 text-gray-700" /></div>
-          <h2 className="text-lg sm:text-xl font-medium text-gray-900">Lesson Details</h2>
-        </div>
-
-        {holidayWarning && (
-          <div ref={holidayRef} className="bg-amber-50 text-amber-800 p-4 rounded-xl border border-amber-200 flex items-start text-sm">
-            <AlertTriangle className="w-5 h-5 mr-3 flex-shrink-0 mt-0.5" /><p className="leading-relaxed">{holidayWarning}</p>
-          </div>
-        )}
-
-        {suggestedTopic && selectedSubject && (
-          <div ref={suggestionRef} className="bg-blue-50 border border-blue-200 rounded-xl p-4 sm:p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-blue-900 flex items-center mb-1.5"><Sparkles className="w-4 h-4 mr-1.5 text-blue-600" /> Smart Suggestion</h3>
-            <p className="text-sm text-blue-800 mb-3">{suggestedTopic}</p>
-            <button onClick={acceptSuggestion} className="bg-white text-blue-700 border border-blue-200 px-4 py-2 rounded-lg text-xs font-medium hover:bg-blue-50 transition-colors">Auto-fill Lesson Data</button>
-          </div>
-        )}
-
-        <div className="space-y-5">
-          <div>
-            <label className="text-sm font-semibold text-gray-700 mb-1.5 block">Learning Objective</label>
-            <textarea value={formData.learningObjective} onChange={(e) => updateField('learningObjective', e.target.value)}
-              placeholder="What should the students understand by the end?"
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 sm:p-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:bg-white transition-all min-h-[80px] sm:min-h-[100px] resize-none" />
-          </div>
-          <div>
-            <label className="text-sm font-semibold text-gray-700 mb-1.5 block">Teaching Method</label>
-            <input type="text" value={formData.teachingMethod} onChange={(e) => updateField('teachingMethod', e.target.value)}
-              placeholder="e.g., Interactive lecture, group presentation, case study..."
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900" />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <div>
-              <label className="text-sm font-semibold text-gray-700 mb-1.5 block">Resources / Materials</label>
-              <input type="text" value={formData.resources} onChange={(e) => updateField('resources', e.target.value)}
-                placeholder="Textbooks, PDFs, links" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900" />
+      {/* Calendar Navigation */}
+      {selectedSubject && (
+        <div className="cal-animate">
+          <div className="bg-white rounded-2xl shadow-soft border border-soft overflow-hidden">
+            {/* Month Header */}
+            <div className="flex items-center justify-between px-4 sm:px-6 py-4 bg-gray-900 text-white">
+              <button onClick={() => setCurrentMonthIdx(Math.max(0, currentMonthIdx - 1))}
+                disabled={currentMonthIdx === 0}
+                className="p-2 rounded-lg hover:bg-white/10 transition-colors disabled:opacity-30">
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <div className="text-center">
+                <h2 className="text-lg sm:text-xl font-semibold">{currentAcademicMonth?.name} {currentAcademicMonth?.year}</h2>
+                <p className="text-xs text-gray-300 mt-0.5">Academic Month {currentMonthIdx + 1} of 10</p>
+              </div>
+              <button onClick={() => setCurrentMonthIdx(Math.min(9, currentMonthIdx + 1))}
+                disabled={currentMonthIdx === 9}
+                className="p-2 rounded-lg hover:bg-white/10 transition-colors disabled:opacity-30">
+                <ChevronRight className="w-5 h-5" />
+              </button>
             </div>
-            <div>
-              <label className="text-sm font-semibold text-gray-700 mb-1.5 block">Assessment Method</label>
-              <input type="text" value={formData.assessment} onChange={(e) => updateField('assessment', e.target.value)}
-                placeholder="Quiz, Q&A, Homework" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900" />
+
+            {/* Day Headers */}
+            <div className="grid grid-cols-6 border-b border-gray-100">
+              {DAYS.map(day => (
+                <div key={day} className="text-center py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">{day}</div>
+              ))}
             </div>
-            <div>
-              <label className="text-sm font-semibold text-gray-700 mb-1.5 block">Homework Assigned</label>
-              <input type="text" value={formData.homework} onChange={(e) => updateField('homework', e.target.value)}
-                placeholder="Details of assignments" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900" />
-            </div>
-            <div>
-              <label className="text-sm font-semibold text-gray-700 mb-1.5 block">Differentiation Strategy</label>
-              <input type="text" value={formData.differentiation} onChange={(e) => updateField('differentiation', e.target.value)}
-                placeholder="How to support varied learners" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900" />
+
+            {/* Week Rows */}
+            {weeks.map((week, wi) => {
+              const status = getWeekStatus(week.start, week.end, weeklyPlans);
+              const statusColors = {
+                submitted: 'bg-green-50 hover:bg-green-100/70 border-l-4 border-l-green-500',
+                draft: 'bg-amber-50 hover:bg-amber-100/70 border-l-4 border-l-amber-400',
+                empty: 'bg-white hover:bg-gray-50 border-l-4 border-l-transparent',
+              };
+              return (
+                <button
+                  key={wi}
+                  onClick={() => openWeekModal(week.start, week.end)}
+                  className={`w-full grid grid-cols-6 transition-all cursor-pointer group ${statusColors[status]} ${wi < weeks.length - 1 ? 'border-b border-gray-100' : ''}`}
+                >
+                  {week.days.map((day, di) => (
+                    <div key={di} className={`py-3 sm:py-4 text-center text-sm transition-colors ${day ? 'text-gray-900 font-medium' : 'text-gray-300'}`}>
+                      {day ? day.getDate() : ''}
+                    </div>
+                  ))}
+                </button>
+              );
+            })}
+
+            {/* Legend */}
+            <div className="px-4 sm:px-6 py-3 bg-gray-50 flex items-center gap-4 sm:gap-6 text-xs text-gray-500 border-t border-gray-100">
+              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-green-500"></div> Submitted</div>
+              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-amber-400"></div> Draft</div>
+              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-gray-200 border border-gray-300"></div> Empty</div>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Bottom Sticky Submit */}
-      <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-gray-200 p-3 sm:p-4 z-40">
-        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between px-4 sm:px-6 gap-3 sm:gap-0">
-          <div className="w-full sm:w-auto">
-            {submitStatus === 'success' && <div className="flex items-center text-sm font-medium text-green-700"><CheckCircle2 className="w-4 h-4 mr-2" /> Weekly plan submitted!</div>}
-            {submitStatus === 'error' && <div className="flex items-center text-sm font-medium text-red-600"><AlertCircle className="w-4 h-4 mr-2" /> {errorMsg}</div>}
-            {submitStatus === 'idle' && <p className="text-sm text-gray-500 hidden sm:block">All changes are auto-saved as drafts.</p>}
+          {/* Month Quick Nav */}
+          <div className="flex flex-wrap gap-1.5 mt-4 justify-center">
+            {ACADEMIC_MONTHS.map((m, i) => (
+              <button key={m.name} onClick={() => setCurrentMonthIdx(i)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${i === currentMonthIdx ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                {m.name.substring(0, 3)}
+              </button>
+            ))}
           </div>
-          <button onClick={handleSubmit} disabled={submitStatus === 'submitting'}
-            className="bg-gray-900 hover:bg-gray-800 text-white px-8 py-3 rounded-xl font-medium transition-transform active:scale-95 w-full sm:w-auto disabled:opacity-70 flex items-center justify-center">
-            {submitStatus === 'submitting' ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Submitting...</>) : 'Submit Weekly Plan'}
-          </button>
         </div>
-      </div>
+      )}
 
+      {/* Slide-out Modal */}
+      {modalOpen && selectedWeek && (
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm"></div>
+          <div ref={modalRef} className="relative w-full max-w-lg bg-white shadow-2xl h-full overflow-y-auto">
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between z-10">
+              <div>
+                <h3 className="font-semibold text-gray-900 text-lg">
+                  Week of {selectedWeek.start.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })} – {selectedWeek.end.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">{selectedAssignment?.subject} • {selectedAssignment?.class}</p>
+              </div>
+              <button onClick={closeModal} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-5">
+              {/* Smart Suggestion */}
+              {smartSuggestion && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 shadow-sm">
+                  <h4 className="text-sm font-semibold text-blue-900 flex items-center mb-1.5">
+                    <Sparkles className="w-4 h-4 mr-1.5 text-blue-600" /> Smart Suggestion from Yearly Plan
+                  </h4>
+                  <p className="text-sm text-blue-800 mb-3 leading-relaxed">{smartSuggestion}</p>
+                  <button onClick={acceptSuggestion}
+                    className="bg-white text-blue-700 border border-blue-200 px-4 py-2 rounded-lg text-xs font-medium hover:bg-blue-50 transition-colors">
+                    Auto-fill Learning Objective
+                  </button>
+                </div>
+              )}
+
+              {/* Form Fields with Dynamic Labels */}
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-semibold text-gray-700 mb-1.5 block">{labels.learningObjective}</label>
+                  <textarea value={formData.learningObjective} onChange={(e) => setFormData(p => ({ ...p, learningObjective: e.target.value }))}
+                    placeholder={`Enter ${labels.learningObjective.toLowerCase()}...`}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:bg-white transition-all min-h-[80px] resize-none" />
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-gray-700 mb-1.5 block">{labels.teachingMethod}</label>
+                  <input type="text" value={formData.teachingMethod} onChange={(e) => setFormData(p => ({ ...p, teachingMethod: e.target.value }))}
+                    placeholder={`Enter ${labels.teachingMethod.toLowerCase()}...`}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900" />
+                </div>
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700 mb-1.5 block">{labels.field1}</label>
+                    <input type="text" value={formData.field1} onChange={(e) => setFormData(p => ({ ...p, field1: e.target.value }))}
+                      placeholder={`Enter ${labels.field1.toLowerCase()}...`}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700 mb-1.5 block">{labels.field2}</label>
+                    <input type="text" value={formData.field2} onChange={(e) => setFormData(p => ({ ...p, field2: e.target.value }))}
+                      placeholder={`Enter ${labels.field2.toLowerCase()}...`}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700 mb-1.5 block">{labels.field3}</label>
+                    <input type="text" value={formData.field3} onChange={(e) => setFormData(p => ({ ...p, field3: e.target.value }))}
+                      placeholder={`Enter ${labels.field3.toLowerCase()}...`}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700 mb-1.5 block">{labels.field4}</label>
+                    <input type="text" value={formData.field4} onChange={(e) => setFormData(p => ({ ...p, field4: e.target.value }))}
+                      placeholder={`Enter ${labels.field4.toLowerCase()}...`}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Messages */}
+              {submitStatus === 'success' && (
+                <div className="flex items-center text-sm font-medium text-green-700 bg-green-50 px-4 py-3 rounded-xl border border-green-200">
+                  <CheckCircle2 className="w-4 h-4 mr-2" /> Plan saved successfully!
+                </div>
+              )}
+              {submitStatus === 'error' && (
+                <div className="flex items-center text-sm font-medium text-red-600 bg-red-50 px-4 py-3 rounded-xl border border-red-200">
+                  <AlertCircle className="w-4 h-4 mr-2" /> {errorMsg}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => handleSubmit('DRAFT')} disabled={submitStatus === 'submitting'}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-medium transition-colors flex items-center justify-center disabled:opacity-70">
+                  {submitStatus === 'submitting' ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4 mr-2" /> Save Draft</>}
+                </button>
+                <button onClick={() => handleSubmit('SUBMITTED')} disabled={submitStatus === 'submitting'}
+                  className="flex-1 bg-gray-900 hover:bg-gray-800 text-white py-3 rounded-xl font-medium transition-all active:scale-[0.98] flex items-center justify-center disabled:opacity-70">
+                  {submitStatus === 'submitting' ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle2 className="w-4 h-4 mr-2" /> Submit</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

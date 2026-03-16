@@ -6,9 +6,16 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
+    const className = searchParams.get('class');
+    const subject = searchParams.get('subject');
+
+    const where: Record<string, string> = {};
+    if (userId) where.userId = userId;
+    if (className) where.class = className;
+    if (subject) where.subject = subject;
 
     const plans = await prisma.weeklyPlan.findMany({
-      where: userId ? { userId } : undefined,
+      where: Object.keys(where).length > 0 ? where : undefined,
       orderBy: { updatedAt: 'desc' }
     });
 
