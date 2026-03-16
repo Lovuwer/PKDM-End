@@ -34,10 +34,11 @@ interface YearlyPlanData {
 }
 
 const ACADEMIC_YEARS = [
-  '2024-2025',
-  '2025-2026',
   '2026-2027',
-  '2027-2028'
+  '2027-2028',
+  '2028-2029',
+  '2029-2030',
+  '2030-2031'
 ];
 
 function getAcademicMonthsData(academicYear: string) {
@@ -149,7 +150,7 @@ export default function WeeklyPlan() {
   });
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [selectedSubject, setSelectedSubject] = useState('');
-  const [selectedAcademicYear, setSelectedAcademicYear] = useState('2025-2026');
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState('2026-2027');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -464,7 +465,7 @@ export default function WeeklyPlan() {
       </div>
 
       {/* Select Assignment */}
-      <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-soft border border-soft mb-6 cal-animate">
+      <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-soft border border-soft mb-6 cal-animate relative z-20">
         <label className="text-sm font-semibold text-gray-700 mb-2 block">Select Assignment</label>
         <div ref={dropdownRef} className="relative">
           <button type="button" onClick={() => setDropdownOpen(!dropdownOpen)}

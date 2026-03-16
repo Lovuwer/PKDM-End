@@ -18,17 +18,18 @@ const ACADEMIC_MONTHS = [
 ];
 
 const ACADEMIC_YEARS = [
-  '2024-2025',
-  '2025-2026',
   '2026-2027',
-  '2027-2028'
+  '2027-2028',
+  '2028-2029',
+  '2029-2030',
+  '2030-2031'
 ];
 
 export default function YearlyPlan() {
   const router = useRouter();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [selectedSubject, setSelectedSubject] = useState('');
-  const [selectedAcademicYear, setSelectedAcademicYear] = useState('2025-2026');
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState('2026-2027');
   const [expandedMonth, setExpandedMonth] = useState<string | null>('June');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('saved');
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
@@ -268,7 +269,7 @@ export default function YearlyPlan() {
       </div>
 
       {/* Select Assignment */}
-      <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-soft border border-soft mb-8">
+      <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-soft border border-soft mb-8 relative z-20">
         <label className="text-sm font-semibold text-gray-700 mb-2 block">Select Assignment</label>
         <div ref={dropdownRef} className="relative">
           <button

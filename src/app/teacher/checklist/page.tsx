@@ -141,15 +141,18 @@ export default function ChecklistPage() {
   };
 
   const generatePrepSteps = async () => {
+    // Collect plans to send for prep generation. Prioritize active, but use fully submitted DB items if none are left pending.
     const activeDbItems = dbItems.filter(i => !i.completed);
-    if (activeDbItems.length === 0) {
-      alert("You have no pending Weekly Plans to generate prep tasks for.");
+    const plansToPrep = activeDbItems.length > 0 ? activeDbItems : dbItems;
+    
+    if (plansToPrep.length === 0) {
+      alert("You have no SUBMITTED Weekly Plans to generate prep tasks for.");
       return;
     }
     
     setIsGenerating(true);
     try {
-      const plans = activeDbItems.map(i => i.weeklyPlanData);
+      const plans = plansToPrep.map(i => i.weeklyPlanData);
       const res = await fetch('/api/ai/checklist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
