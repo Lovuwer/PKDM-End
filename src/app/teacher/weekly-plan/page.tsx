@@ -33,18 +33,29 @@ interface YearlyPlanData {
   draftData?: Record<string, string>;
 }
 
-const ACADEMIC_MONTHS = [
-  { name: 'June', year: 2025, month: 5 },
-  { name: 'July', year: 2025, month: 6 },
-  { name: 'August', year: 2025, month: 7 },
-  { name: 'September', year: 2025, month: 8 },
-  { name: 'October', year: 2025, month: 9 },
-  { name: 'November', year: 2025, month: 10 },
-  { name: 'December', year: 2025, month: 11 },
-  { name: 'January', year: 2026, month: 0 },
-  { name: 'February', year: 2026, month: 1 },
-  { name: 'March', year: 2026, month: 2 },
+const ACADEMIC_YEARS = [
+  '2024-2025',
+  '2025-2026',
+  '2026-2027',
+  '2027-2028'
 ];
+
+function getAcademicMonthsData(academicYear: string) {
+  const startYear = parseInt(academicYear.split('-')[0]);
+  const endYear = startYear + 1;
+  return [
+    { name: 'June', year: startYear, month: 5 },
+    { name: 'July', year: startYear, month: 6 },
+    { name: 'August', year: startYear, month: 7 },
+    { name: 'September', year: startYear, month: 8 },
+    { name: 'October', year: startYear, month: 9 },
+    { name: 'November', year: startYear, month: 10 },
+    { name: 'December', year: startYear, month: 11 },
+    { name: 'January', year: endYear, month: 0 },
+    { name: 'February', year: endYear, month: 1 },
+    { name: 'March', year: endYear, month: 2 },
+  ];
+}
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -138,6 +149,7 @@ export default function WeeklyPlan() {
   });
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [selectedSubject, setSelectedSubject] = useState('');
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState('2025-2026');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -148,6 +160,8 @@ export default function WeeklyPlan() {
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingBulk, setIsGeneratingBulk] = useState(false);
+
+  const ACADEMIC_MONTHS = getAcademicMonthsData(selectedAcademicYear);
   
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -201,10 +215,10 @@ export default function WeeklyPlan() {
 
   // Fetch yearly plan for smart suggestions
   useEffect(() => {
-    if (!userId || !selectedSubject) return;
+    if (!userId || !selectedSubject || !selectedAcademicYear) return;
     const assignment = assignments.find(a => a.id === selectedSubject);
     if (!assignment) return;
-    fetch(`/api/plans/yearly?userId=${userId}&class=${encodeURIComponent(assignment.class)}&subject=${encodeURIComponent(assignment.subject)}`)
+    fetch(`/api/plans/yearly?userId=${userId}&class=${encodeURIComponent(assignment.class)}&subject=${encodeURIComponent(assignment.subject)}&academicYear=${encodeURIComponent(selectedAcademicYear)}`)
       .then(r => r.json())
       .then((data: YearlyPlanData[]) => {
         if (Array.isArray(data) && data.length > 0 && data[0].draftData) {
@@ -214,7 +228,7 @@ export default function WeeklyPlan() {
         }
       })
       .catch(() => setYearlyPlanData({}));
-  }, [userId, selectedSubject, assignments]);
+  }, [userId, selectedSubject, assignments, selectedAcademicYear]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -471,6 +485,23 @@ export default function WeeklyPlan() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Select Academic Year */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-soft border border-soft mb-6 cal-animate">
+        <label className="text-sm font-semibold text-gray-700 mb-2 block">Select Academic Year</label>
+        <select
+          value={selectedAcademicYear}
+          onChange={(e) => {
+            setSelectedAcademicYear(e.target.value);
+            setCurrentMonthIdx(0); // Reset to first month on year change
+          }}
+          className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+        >
+          {ACADEMIC_YEARS.map(year => (
+            <option key={year} value={year}>{year}</option>
+          ))}
+        </select>
       </div>
 
       {/* Calendar Navigation */}

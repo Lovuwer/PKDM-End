@@ -17,10 +17,18 @@ const ACADEMIC_MONTHS = [
   'November', 'December', 'January', 'February', 'March'
 ];
 
+const ACADEMIC_YEARS = [
+  '2024-2025',
+  '2025-2026',
+  '2026-2027',
+  '2027-2028'
+];
+
 export default function YearlyPlan() {
   const router = useRouter();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [selectedSubject, setSelectedSubject] = useState('');
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState('2025-2026');
   const [expandedMonth, setExpandedMonth] = useState<string | null>('June');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('saved');
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
@@ -68,13 +76,13 @@ export default function YearlyPlan() {
       .catch(() => {});
   }, [userId]);
 
-  // Load existing plan data when assignment is selected
+  // Load existing plan data when assignment or year is selected
   useEffect(() => {
-    if (!selectedSubject || !userId) return;
+    if (!selectedSubject || !userId || !selectedAcademicYear) return;
     const assignment = assignments.find(a => a.id === selectedSubject);
     if (!assignment) return;
 
-    fetch(`/api/plans/yearly?userId=${userId}&class=${encodeURIComponent(assignment.class)}&subject=${encodeURIComponent(assignment.subject)}`)
+    fetch(`/api/plans/yearly?userId=${userId}&class=${encodeURIComponent(assignment.class)}&subject=${encodeURIComponent(assignment.subject)}&academicYear=${encodeURIComponent(selectedAcademicYear)}`)
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data) && data.length > 0 && data[0].draftData) {
@@ -84,7 +92,7 @@ export default function YearlyPlan() {
         }
       })
       .catch(() => setPlanData({}));
-  }, [selectedSubject, userId, assignments]);
+  }, [selectedSubject, userId, assignments, selectedAcademicYear]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -121,6 +129,7 @@ export default function YearlyPlan() {
             userId,
             className: assignment.class,
             subject: assignment.subject,
+            academicYear: selectedAcademicYear,
             draftData: updated,
             status: 'DRAFT'
           })
@@ -150,6 +159,7 @@ export default function YearlyPlan() {
           userId,
           className: assignment.class,
           subject: assignment.subject,
+          academicYear: selectedAcademicYear,
           draftData: planData,
           status: 'SUBMITTED'
         })
@@ -204,7 +214,14 @@ export default function YearlyPlan() {
           await fetch('/api/plans/yearly', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId, className: assignment.class, subject: assignment.subject, draftData: data.draftData, status: 'DRAFT' })
+            body: JSON.stringify({ 
+              userId, 
+              className: assignment.class, 
+              subject: assignment.subject, 
+              academicYear: selectedAcademicYear,
+              draftData: data.draftData, 
+              status: 'DRAFT' 
+            })
           });
         }
         setTimeout(() => { setAiStatus('idle'); setAiFile(null); }, 3000);
@@ -283,6 +300,20 @@ export default function YearlyPlan() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Select Academic Year */}
+      <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-soft border border-soft mb-8">
+        <label className="text-sm font-semibold text-gray-700 mb-2 block">Select Academic Year</label>
+        <select
+          value={selectedAcademicYear}
+          onChange={(e) => setSelectedAcademicYear(e.target.value)}
+          className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+        >
+          {ACADEMIC_YEARS.map(year => (
+            <option key={year} value={year}>{year}</option>
+          ))}
+        </select>
       </div>
 
       {/* AI Syllabus Upload Zone */}

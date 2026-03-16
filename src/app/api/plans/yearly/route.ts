@@ -8,11 +8,13 @@ export async function GET(request: Request) {
     const userId = searchParams.get('userId');
     const className = searchParams.get('class');
     const subject = searchParams.get('subject');
+    const academicYear = searchParams.get('academicYear');
 
     const where: Record<string, string> = {};
     if (userId) where.userId = userId;
     if (className) where.class = className;
     if (subject) where.subject = subject;
+    if (academicYear) where.academicYear = academicYear;
 
     const plans = await prisma.yearlyPlan.findMany({
       where: Object.keys(where).length > 0 ? where : undefined,
