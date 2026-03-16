@@ -64,7 +64,7 @@ export async function POST(request: Request) {
 // PUT: Update/auto-save a weekly plan
 export async function PUT(request: Request) {
   try {
-    const { id, learningObjective, teachingMethod, field1, field2, field3, field4, status } = await request.json();
+    const { id, learningObjective, teachingMethod, field1, field2, field3, field4, status, isCompleted } = await request.json();
 
     if (!id) {
       return NextResponse.json({ error: 'Plan id is required' }, { status: 400 });
@@ -80,6 +80,7 @@ export async function PUT(request: Request) {
         field3,
         field4,
         status: status || undefined,
+        isCompleted: isCompleted !== undefined ? isCompleted : undefined,
         submittedAt: status === 'SUBMITTED' ? new Date() : undefined
       }
     });

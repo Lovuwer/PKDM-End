@@ -26,6 +26,7 @@ interface WeeklyPlanData {
   field2?: string;
   field3?: string;
   field4?: string;
+  isCompleted?: boolean;
 }
 
 interface YearlyPlanData {
@@ -145,6 +146,9 @@ export default function WeeklyPlan() {
   const [weeklyPlans, setWeeklyPlans] = useState<WeeklyPlanData[]>([]);
   const [yearlyPlanData, setYearlyPlanData] = useState<Record<string, string>>({});
 
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingBulk, setIsGeneratingBulk] = useState(false);
+  
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedWeek, setSelectedWeek] = useState<{ start: Date; end: Date } | null>(null);
@@ -155,11 +159,12 @@ export default function WeeklyPlan() {
     field2: '',
     field3: '',
     field4: '',
+    isCompleted: false,
   });
+
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [smartSuggestion, setSmartSuggestion] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
 
   // Keep track of auth redirect
   useEffect(() => {
@@ -244,9 +249,10 @@ export default function WeeklyPlan() {
         field2: existingPlan.field2 || '',
         field3: existingPlan.field3 || '',
         field4: existingPlan.field4 || '',
+        isCompleted: existingPlan.isCompleted || false,
       });
     } else {
-      setFormData({ learningObjective: '', teachingMethod: '', field1: '', field2: '', field3: '', field4: '' });
+      setFormData({ learningObjective: '', teachingMethod: '', field1: '', field2: '', field3: '', field4: '', isCompleted: false });
     }
 
     // Smart suggestion from yearly plan
@@ -280,30 +286,36 @@ export default function WeeklyPlan() {
     }
   };
 
+  const selectedAssignment = assignments.find(a => a.id === selectedSubject);
+
   const handleSubmit = async (status: 'DRAFT' | 'SUBMITTED') => {
-    if (!selectedWeek || !userId || !selectedSubject) return;
-    const assignment = assignments.find(a => a.id === selectedSubject);
-    if (!assignment) return;
+    if (!selectedWeek || !userId || !selectedAssignment) return;
 
     setSubmitStatus('submitting');
     try {
+      const existingPlan = findPlanForWeek(selectedWeek.start, selectedWeek.end, weeklyPlans);
+      
+      const payload = {
+        id: existingPlan?.id,
+        userId,
+        className: selectedAssignment.class,
+        subject: selectedAssignment.subject,
+        startDate: formatDate(selectedWeek.start),
+        endDate: formatDate(selectedWeek.end),
+        learningObjective: formData.learningObjective,
+        teachingMethod: formData.teachingMethod,
+        field1: formData.field1,
+        field2: formData.field2,
+        field3: formData.field3,
+        field4: formData.field4,
+        status,
+        isCompleted: formData.isCompleted,
+      };
+
       const res = await fetch('/api/plans/weekly', {
-        method: 'POST',
+        method: existingPlan ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          className: assignment.class,
-          subject: assignment.subject,
-          startDate: formatDate(selectedWeek.start),
-          endDate: formatDate(selectedWeek.end),
-          learningObjective: formData.learningObjective,
-          teachingMethod: formData.teachingMethod,
-          field1: formData.field1,
-          field2: formData.field2,
-          field3: formData.field3,
-          field4: formData.field4,
-          status,
-        })
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         setSubmitStatus('success');
@@ -361,7 +373,64 @@ export default function WeeklyPlan() {
     }
   };
 
-  const selectedAssignment = assignments.find(a => a.id === selectedSubject);
+  const generateBulkWeeklyPlans = async () => {
+    if (!selectedAssignment || !userId) return;
+    setIsGeneratingBulk(true);
+    
+    // Identify missing weeks and correlate with YearlyPlanData topics
+    const missingWeeks = [];
+    for (let currentMonthIdx = 0; currentMonthIdx < ACADEMIC_MONTHS.length; currentMonthIdx++) {
+      const acMonth = ACADEMIC_MONTHS[currentMonthIdx];
+      const monthWeeks = getWeeksOfMonth(acMonth.year, acMonth.month);
+      
+      for (let i = 0; i < monthWeeks.length; i++) {
+         const w = monthWeeks[i];
+         const exists = findPlanForWeek(w.start, w.end, weeklyPlans);
+         if (!exists) {
+            const topicKey = `${acMonth.name}_${i + 1}`;
+            missingWeeks.push({
+              academicMonth: acMonth.name,
+              weekNum: i + 1,
+              startDate: formatDate(w.start),
+              endDate: formatDate(w.end),
+              topic: yearlyPlanData[topicKey] || ''
+            });
+         }
+      }
+    }
+
+    if (missingWeeks.length === 0) {
+      alert('All weeks have already been planned!');
+      setIsGeneratingBulk(false);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/ai/bulk-weekly-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          subject: selectedAssignment.subject,
+          className: selectedAssignment.class,
+          weeksToGenerate: missingWeeks,
+          labels
+        })
+      });
+
+      if (res.ok) {
+        fetchPlans(); // Refresh the list
+        alert(`Successfully generated and saved ${missingWeeks.length} weekly plans with AI!`);
+      } else {
+        alert('Failed to bulk generate. See console.');
+      }
+    } catch {
+      alert('Network error during bulk generation.');
+    } finally {
+      setIsGeneratingBulk(false);
+    }
+  };
+
   const selectedLabel = selectedAssignment
     ? `${selectedAssignment.subject} - ${selectedAssignment.class} (${selectedAssignment.batch})`
     : '';
@@ -436,8 +505,13 @@ export default function WeeklyPlan() {
             {/* Week Rows */}
             {weeks.map((week, wi) => {
               const status = getWeekStatus(week.start, week.end, weeklyPlans);
+              const plan = findPlanForWeek(week.start, week.end, weeklyPlans);
+              const isCompleted = plan?.isCompleted;
+
               const statusColors = {
-                submitted: 'bg-green-50 hover:bg-green-100/70 border-l-4 border-l-green-500',
+                submitted: isCompleted 
+                  ? 'bg-green-100 hover:bg-green-200 border-l-4 border-l-green-600' 
+                  : 'bg-green-50 hover:bg-green-100/70 border-l-4 border-l-green-400',
                 draft: 'bg-amber-50 hover:bg-amber-100/70 border-l-4 border-l-amber-400',
                 empty: 'bg-white hover:bg-gray-50 border-l-4 border-l-transparent',
               };
@@ -445,10 +519,17 @@ export default function WeeklyPlan() {
                 <button
                   key={wi}
                   onClick={() => openWeekModal(week.start, week.end)}
-                  className={`w-full grid grid-cols-6 transition-all cursor-pointer group ${statusColors[status]} ${wi < weeks.length - 1 ? 'border-b border-gray-100' : ''}`}
+                  className={`w-full grid grid-cols-6 transition-all cursor-pointer group ${statusColors[status]} relative ${wi < weeks.length - 1 ? 'border-b border-gray-100' : ''}`}
                 >
+                  {isCompleted && (
+                    <div className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
+                      <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                  )}
                   {week.days.map((day, di) => (
-                    <div key={di} className={`py-3 sm:py-4 text-center text-sm transition-colors ${day ? 'text-gray-900 font-medium' : 'text-gray-300'}`}>
+                    <div key={di} className={`py-3 sm:py-4 text-center text-sm transition-colors ${day ? (isCompleted ? 'text-gray-900 line-through opacity-70' : 'text-gray-900 font-medium') : 'text-gray-300'}`}>
                       {day ? day.getDate() : ''}
                     </div>
                   ))}
@@ -465,13 +546,24 @@ export default function WeeklyPlan() {
           </div>
 
           {/* Month Quick Nav */}
-          <div className="flex flex-wrap gap-1.5 mt-4 justify-center">
-            {ACADEMIC_MONTHS.map((m, i) => (
-              <button key={m.name} onClick={() => setCurrentMonthIdx(i)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${i === currentMonthIdx ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                {m.name.substring(0, 3)}
-              </button>
-            ))}
+          <div className="flex flex-col sm:flex-row items-center justify-between mt-4">
+             <div className="flex flex-wrap gap-1.5 justify-center sm:justify-start">
+              {ACADEMIC_MONTHS.map((m, i) => (
+                <button key={m.name} onClick={() => setCurrentMonthIdx(i)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${i === currentMonthIdx ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                  {m.name.substring(0, 3)}
+                </button>
+              ))}
+            </div>
+            
+            <button 
+              onClick={generateBulkWeeklyPlans}
+              disabled={isGeneratingBulk}
+              className="mt-4 sm:mt-0 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 px-4 py-2 rounded-xl text-sm font-semibold transition-colors flex items-center shadow-sm"
+            >
+              {isGeneratingBulk ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2 text-purple-600" />}
+              {isGeneratingBulk ? 'AI is Generating the Year...' : 'Bulk Auto-Plan Missing Weeks'}
+            </button>
           </div>
         </div>
       )}
@@ -513,14 +605,28 @@ export default function WeeklyPlan() {
               <div className="space-y-4">
                 <div className="flex justify-between items-center mb-2">
                   <h4 className="text-sm font-semibold text-gray-900">Lesson Plan Details</h4>
-                  <button 
-                    onClick={generateWeeklyPlan}
-                    disabled={isGenerating}
-                    className="bg-purple-50 text-purple-700 border border-purple-200 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-purple-100 transition-colors flex items-center"
-                  >
-                    {isGenerating ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 mr-1.5" />}
-                    {isGenerating ? 'Generating...' : 'Magic Autofill with AI'}
-                  </button>
+                  
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={formData.isCompleted} 
+                        onChange={(e) => setFormData(p => ({ ...p, isCompleted: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500 relative mr-2"></div>
+                      <span className="text-xs font-medium text-gray-700">Mark Taught</span>
+                    </label>
+
+                    <button 
+                      onClick={generateWeeklyPlan}
+                      disabled={isGenerating}
+                      className="bg-purple-50 text-purple-700 border border-purple-200 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-purple-100 transition-colors flex items-center"
+                    >
+                      {isGenerating ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 mr-1.5" />}
+                      {isGenerating ? 'Generating...' : 'Magic Autofill with AI'}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="text-sm font-semibold text-gray-700 mb-1.5 block">{labels.learningObjective}</label>

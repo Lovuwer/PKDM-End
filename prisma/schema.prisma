@@ -68,6 +68,7 @@ model WeeklyPlan {
   field4            String?
   
   status            PlanStatus // DRAFT | SUBMITTED
+  isCompleted       Boolean    @default(false)
   submittedAt       DateTime?
   updatedAt         DateTime @updatedAt
 }

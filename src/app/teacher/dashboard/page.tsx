@@ -25,12 +25,24 @@ interface YearlyPlan {
   draftData?: unknown;
 }
 
-export default function TeacherDashboard() {
+interface ProgressData {
+  assignmentId: string;
+  class: string;
+  batch: string;
+  subject: string;
+  completedWeeks: number;
+  totalWeeks: number;
+  percentage: number;
+}
+
+export default function Dashboard() {
   const containerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [yearlyPlans, setYearlyPlans] = useState<YearlyPlan[]>([]);
+  const [userId, setUserId] = useState('');
   const [loading, setLoading] = useState(true);
+  const [plans, setPlans] = useState<YearlyPlan[]>([]);
+  const [progressData, setProgressData] = useState<ProgressData[]>([]);
   const [userName] = useState(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('pallikoodam_user');
@@ -53,16 +65,31 @@ export default function TeacherDashboard() {
       return;
     }
     const user = JSON.parse(stored);
+    setUserId(user.id);
 
-    // Fetch real data
-    Promise.all([
-      fetch(`/api/assignments?userId=${user.id}`).then(r => r.json()),
-      fetch(`/api/plans/yearly?userId=${user.id}`).then(r => r.json()),
-    ]).then(([assignmentData, planData]) => {
-      if (Array.isArray(assignmentData)) setAssignments(assignmentData);
-      if (Array.isArray(planData)) setYearlyPlans(planData);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    const fetchAllData = async (uid: string) => {
+      try {
+        setLoading(true);
+        const [assignRes, plansRes, progressRes] = await Promise.all([
+          fetch(`/api/assignments?userId=${uid}`),
+          fetch(`/api/plans/yearly?userId=${uid}`),
+          fetch(`/api/plans/progress?userId=${uid}`)
+        ]);
+
+        if (assignRes.ok) setAssignments(await assignRes.json());
+        if (plansRes.ok) setPlans(await plansRes.json());
+        if (progressRes.ok) {
+           const progData = await progressRes.json();
+           setProgressData(progData.progress || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch data', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAllData(user.id);
 
     const ctx = gsap.context(() => {
       gsap.fromTo(
@@ -75,12 +102,12 @@ export default function TeacherDashboard() {
   }, [router]);
 
   const getStatus = (assignment: Assignment) => {
-    const plan = yearlyPlans.find(p => p.class === assignment.class && p.subject === assignment.subject);
-    return plan?.status === 'SUBMITTED' ? 'Submitted' : 'Draft';
+    const hasPlan = plans.find(p => p.class === assignment.class && p.subject === assignment.subject && p.status === 'SUBMITTED');
+    return hasPlan ? 'Submitted' : 'Draft';
   };
 
   const handleExport = async (subjectName: string, format: 'pdf' | 'excel') => {
-    const plan = yearlyPlans.find(p => p.subject === subjectName);
+    const plan = plans.find(p => p.subject === subjectName);
     const planData = plan ? plan.draftData : null;
 
     const rows: string[][] = [];
@@ -199,16 +226,38 @@ export default function TeacherDashboard() {
             assignments.map((assignment) => {
               const SubjectIcon = getSubjectIcon(assignment.subject);
               const status = getStatus(assignment);
+              const assignmentProgress = progressData.find(p => p.assignmentId === assignment.id);
+              const percentage = assignmentProgress?.percentage || 0;
+              const completedWeeks = assignmentProgress?.completedWeeks || 0;
+              const totalWeeks = assignmentProgress?.totalWeeks || 40;
+
               return (
-                <div key={assignment.id} className="p-4 flex items-center border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                  <div className="w-10 h-10 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center mr-4">
-                    <SubjectIcon className="w-5 h-5 text-gray-600" />
+                <div key={assignment.id} className="p-4 flex flex-col md:flex-row md:items-center border-b border-gray-50 hover:bg-gray-50 transition-colors gap-4">
+                  <div className="flex items-center md:w-1/3">
+                    <div className="w-10 h-10 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center mr-4 shrink-0">
+                      <SubjectIcon className="w-5 h-5 text-gray-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-gray-900">{assignment.subject} · {assignment.class}</h3>
+                      <p className="text-xs text-gray-500">{assignment.batch}</p>
+                    </div>
                   </div>
-                  <div className="flex-grow">
-                    <h3 className="font-medium text-gray-900">{assignment.subject} · {assignment.class}</h3>
-                    <p className="text-xs text-gray-500">{assignment.batch}</p>
+
+                  {/* Progress Bar Section */}
+                  <div className="flex-grow flex flex-col justify-center px-4 md:border-l md:border-r border-gray-100">
+                    <div className="flex justify-between items-end mb-1.5">
+                       <span className="text-xs font-semibold text-gray-700">Syllabus Progress</span>
+                       <span className="text-xs text-gray-500 font-medium">{percentage}% ({completedWeeks}/{totalWeeks} weeks)</span>
+                    </div>
+                    <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                       <div 
+                         className="h-full bg-blue-500 rounded-full transition-all duration-1000 ease-out"
+                         style={{ width: `${percentage}%` }}
+                       />
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2">
+
+                  <div className="flex items-center space-x-2 md:w-1/3 justify-end mt-2 md:mt-0">
                     <button 
                       onClick={() => handleExport(assignment.subject, 'excel')}
                       className="inline-flex items-center px-2 py-1 bg-white border border-gray-200 text-gray-600 rounded-lg text-xs hover:bg-gray-50 transition-colors shadow-sm"
@@ -221,7 +270,7 @@ export default function TeacherDashboard() {
                     >
                       <Download className="w-3.5 h-3.5 mr-1" /> PDF
                     </button>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ml-2 ${
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ml-2 whitespace-nowrap ${
                       status === 'Submitted' 
                         ? 'bg-green-50 text-green-700 border border-green-200' 
                         : 'bg-amber-50 text-amber-700 border border-amber-200'
