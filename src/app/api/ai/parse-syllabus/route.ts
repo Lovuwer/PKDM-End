@@ -17,37 +17,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    // Extract text from PDF
+    // Extract file buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    
-    let extractedText = '';
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pdfParse = require('pdf-parse');
-      const pdfData = await pdfParse(buffer);
-      extractedText = pdfData.text;
-    } catch {
-      return NextResponse.json({ error: 'Failed to read PDF. Make sure it is a valid PDF file.' }, { status: 400 });
-    }
 
-    if (!extractedText || extractedText.trim().length < 50) {
-      return NextResponse.json({ error: 'PDF appears to be empty or too short. Try a different file.' }, { status: 400 });
-    }
-
-    // Truncate if too long (Gemini has a context limit)
-    const maxChars = 30000;
-    const textToSend = extractedText.length > maxChars 
-      ? extractedText.substring(0, maxChars) + '\n\n[... truncated for length ...]' 
-      : extractedText;
-
-    // Call Gemini to map syllabus to academic months
+    // Call Gemini to map syllabus to academic months using native Document support
     const genAI = new GoogleGenerativeAI(apiKey!);
     const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
 
     const prompt = `You are an expert academic curriculum planner for an Indian CISCE school (Pallikoodam, Chattisgarh).
 
-Given the following syllabus/curriculum document text, create a detailed week-by-week breakdown for an academic year from June to March (10 months, 4 weeks each = 40 weeks total).
+I have attached a syllabus/curriculum PDF document. Please read it and create a detailed week-by-week breakdown for an academic year from June to March (10 months, 4 weeks each = 40 weeks total).
 
 For each week, provide a brief description of what topics/chapters should be covered that week.
 
@@ -58,19 +38,18 @@ The JSON format must be exactly:
   "June_1": "Topic for June Week 1",
   "June_2": "Topic for June Week 2", 
   "June_3": "Topic for June Week 3",
-  "June_4": "Topic for June Week 4",
-  "July_1": "Topic for July Week 1",
-  ... and so on through ...
+  ...
   "March_4": "Topic for March Week 4"
-}
+}`;
 
-The months are: June, July, August, September, October, November, December, January, February, March
+    const pdfPart = {
+      inlineData: {
+        data: buffer.toString('base64'),
+        mimeType: 'application/pdf',
+      },
+    };
 
-Here is the syllabus text:
-
-${textToSend}`;
-
-    const result = await model.generateContent(prompt);
+    const result = await model.generateContent([prompt, pdfPart]);
     const responseText = result.response.text();
 
     // Parse the JSON from AI response

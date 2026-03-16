@@ -159,6 +159,7 @@ export default function WeeklyPlan() {
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [smartSuggestion, setSmartSuggestion] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // Keep track of auth redirect
   useEffect(() => {
@@ -324,6 +325,42 @@ export default function WeeklyPlan() {
     setFormData(prev => ({ ...prev, learningObjective: smartSuggestion }));
   };
 
+  const generateWeeklyPlan = async () => {
+    setIsGenerating(true);
+    setErrorMsg('');
+    try {
+      const res = await fetch('/api/ai/weekly-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: selectedAssignment?.subject,
+          className: selectedAssignment?.class,
+          topic: smartSuggestion || '',
+          labels
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success && data.aiData) {
+        setFormData(prev => ({
+          ...prev,
+          learningObjective: data.aiData.learningObjective || prev.learningObjective,
+          teachingMethod: data.aiData.teachingMethod || prev.teachingMethod,
+          field1: data.aiData.field1 || prev.field1,
+          field2: data.aiData.field2 || prev.field2,
+          field3: data.aiData.field3 || prev.field3,
+          field4: data.aiData.field4 || prev.field4,
+        }));
+      } else {
+        setErrorMsg(data.error || 'Failed to generate plan.');
+      }
+    } catch {
+      setErrorMsg('Network error while connecting to AI.');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const selectedAssignment = assignments.find(a => a.id === selectedSubject);
   const selectedLabel = selectedAssignment
     ? `${selectedAssignment.subject} - ${selectedAssignment.class} (${selectedAssignment.batch})`
@@ -467,13 +504,24 @@ export default function WeeklyPlan() {
                   <p className="text-sm text-blue-800 mb-3 leading-relaxed">{smartSuggestion}</p>
                   <button onClick={acceptSuggestion}
                     className="bg-white text-blue-700 border border-blue-200 px-4 py-2 rounded-lg text-xs font-medium hover:bg-blue-50 transition-colors">
-                    Auto-fill Learning Objective
+                    Use as Learning Objective
                   </button>
                 </div>
               )}
 
               {/* Form Fields with Dynamic Labels */}
               <div className="space-y-4">
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="text-sm font-semibold text-gray-900">Lesson Plan Details</h4>
+                  <button 
+                    onClick={generateWeeklyPlan}
+                    disabled={isGenerating}
+                    className="bg-purple-50 text-purple-700 border border-purple-200 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-purple-100 transition-colors flex items-center"
+                  >
+                    {isGenerating ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 mr-1.5" />}
+                    {isGenerating ? 'Generating...' : 'Magic Autofill with AI'}
+                  </button>
+                </div>
                 <div>
                   <label className="text-sm font-semibold text-gray-700 mb-1.5 block">{labels.learningObjective}</label>
                   <textarea value={formData.learningObjective} onChange={(e) => setFormData(p => ({ ...p, learningObjective: e.target.value }))}
